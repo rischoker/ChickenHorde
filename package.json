@@ -1,0 +1,9 @@
+{
+  "name": "chicken-horde",
+  "version": "7.0.0",
+  "private": true,
+  "description": "Chicken Horde: static game + optional WebSocket relay server (server/relay-server.js).",
+  "scripts": { "start": "node server/relay-server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}

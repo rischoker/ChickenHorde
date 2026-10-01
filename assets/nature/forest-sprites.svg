@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="512" viewBox="0 0 1024 512">
+<defs>
+ <linearGradient id="leaf1" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b8df73"/><stop offset="1" stop-color="#43863f"/></linearGradient>
+ <linearGradient id="leaf2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#c9e783"/><stop offset="1" stop-color="#58934a"/></linearGradient>
+ <linearGradient id="leaf3" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8fc65b"/><stop offset="1" stop-color="#356f3c"/></linearGradient>
+ <linearGradient id="rock" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#d4d0b9"/><stop offset="1" stop-color="#777e70"/></linearGradient>
+ <linearGradient id="bush" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#a8d26a"/><stop offset="1" stop-color="#397744"/></linearGradient>
+</defs>
+<!-- Four tree canopies -->
+<g stroke="#386c38" stroke-width="3" stroke-linejoin="round"><path fill="#93623b" d="M105 226h34l-5-77h-24z"/><path fill="url(#leaf1)" d="M41 157 70 90l-3-22 33 15 27-43 17 43 43-12-8 34 37 52-41 34-58 13-60-15z"/><path fill="#d4ee92" opacity=".5" d="m70 95 30-12 9 47-39 27-25-4z"/><path fill="url(#leaf3)" d="m102 61 25-21 17 43-29 32-15-13z"/></g>
+<g stroke="#386c38" stroke-width="3" stroke-linejoin="round"><path fill="#8b5d3c" d="M365 226h34l-5-86h-24z"/><path fill="url(#leaf2)" d="m285 178 19-61-11-18 41-8 27-53 30 47 42-3-16 37 35 44-41 47-66 18-54-22z"/><path fill="#d8efa0" opacity=".48" d="m306 117 39-25 21 38-31 41-49 5z"/></g>
+<g stroke="#386c38" stroke-width="3" stroke-linejoin="round"><path fill="#93623b" d="M616 226h32l-3-77h-25z"/><path fill="url(#leaf3)" d="m541 158 30-54-4-30 34 8 28-40 22 44 40-10-8 35 37 46-42 48-60 17-59-22z"/><path fill="url(#leaf2)" d="m583 104 40-39 38 44-23 47-51 4-25-25z"/></g>
+<g stroke="#386c38" stroke-width="3" stroke-linejoin="round"><path fill="#8b5d3c" d="M877 226h34l-5-78h-24z"/><path fill="url(#leaf1)" d="m799 169 22-51-8-31 37 1 32-42 23 42 44-9-11 39 35 48-43 43-65 18-55-21z"/><path fill="#d8efa0" opacity=".45" d="m816 120 41-29 19 43-36 36-44 0z"/></g>
+<!-- Rocks and low shrubs -->
+<g stroke="#687367" stroke-width="3" stroke-linejoin="round"><path fill="url(#rock)" d="m36 440 18-55 34-29 48 12 33 35 16 44-22 22H52z"/><path fill="#f0ead5" opacity=".65" d="m55 390 34-34 47 12-25 25-54 14z"/><path fill="#6c766b" d="m137 368 27 35 21 44-32 22-20-51z"/></g>
+<g stroke="#687367" stroke-width="3" stroke-linejoin="round"><path fill="url(#rock)" d="m285 443 15-65 32-30 39 8 33 35 19 52-27 26h-88z"/><path fill="#f3edda" opacity=".62" d="m310 378 26-27 35 9-14 30-47 16z"/><path fill="#747c70" d="m372 357 32 34 19 52-27 26-30-54z"/></g>
+<g stroke="#397144" stroke-width="3"><path fill="url(#bush)" d="M528 444c-5-26 13-48 38-44 6-34 49-43 68-18 26-17 61 1 57 33 26 16 16 53-12 59H557c-17-5-27-15-29-30z"/><path fill="#c3e57a" opacity=".5" d="M551 421c7-20 23-23 38-18 9-21 30-25 45-12-22-1-27 12-33 25-20-8-31 4-37 18z"/></g>
+<g stroke="#397144" stroke-width="3"><path fill="url(#bush)" d="M782 444c-5-26 12-48 37-44 10-30 45-40 66-18 28-17 60 1 58 33 28 15 17 52-12 59h-119c-18-5-28-15-30-30z"/><path fill="#c3e57a" opacity=".5" d="M806 421c7-20 25-23 40-18 9-21 30-25 45-12-21-1-27 12-33 25-21-8-33 4-38 18z"/></g>
+</svg>

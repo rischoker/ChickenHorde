@@ -1,0 +1,10 @@
+{
+  "name": "chicken-horde-relay",
+  "version": "7.0.0",
+  "private": true,
+  "description": "WebSocket relay (and optional static host) for Chicken Horde when P2P is blocked by proxies.",
+  "main": "relay-server.js",
+  "scripts": { "start": "node relay-server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
