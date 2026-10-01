@@ -16,9 +16,10 @@ Static multiplayer game for GitHub Pages. The host runs the match; phones join a
 - **Topos**: un hoyo con tierra temblando aparece ~1.7 s antes de que salga el topo (no se le puede dañar mientras emerge).
 
 **Mejoras visuales**
-- Mapa pintado con caminos de tierra, patio del gallinero, flores y variación de pasto; el pasto y los árboles se mueven con el viento; bloom en efectos brillantes (se desactiva solo en PCs lentos o con `&fx=0`).
+- Mapa pintado con caminos de tierra, patio del gallinero, flores y variación de pasto; el pasto y los árboles se mueven con el viento; efectos brillantes con sprites de luz. El bloom opcional se activa con `&fx=1` (apagado por defecto porque en algunas pantallas dejaba el canvas verde).
 - Obstáculos coherentes con la granja: rocas y árboles bloquean todo; pacas de heno y troncos son **cobertura baja** (bloquean el paso de la horda, pero las balas pasan por encima) para canalizar a los enemigos.
 - Power-ups rediseñados en 3D con pilar de luz, anillo pulsante, etiqueta y parpadeo antes de desaparecer.
+- Sonido "peep peep" cuando un pollito recibe daño (y vibración en teléfonos Android).
 - Mama Hen más grande con animación de cacareo y bocadillo **CLUCK!!** cuando la atacan.
 - Pollitos con colores aleatorios bien separados, animación de caminar/respirar/retroceso al disparar; el arma se sostiene a un lado (ya no atraviesa el cuerpo).
 - Lobby con escenario 3D donde baila el pollito de cada jugador; el teléfono muestra el color de tu pollito, tu vida y el estado de resurrección.

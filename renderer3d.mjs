@@ -71,7 +71,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   const playerNodes = new Map(), enemyNodes = new Map(), projectileNodes = new Map(), fireballNodes = new Map(), dropNodes = new Map(), beamNodes = new Map(), bloodNodes = new Map();
   const seenFx = new Set(), activeFx = [];
   let farmBar = null, countdownSprite = null, ready = false, lastFarmValue = -1, lastCountdown = -1;
-  let mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0;
+  let battleFogMesh = null, mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0;
   const target = new THREE.Vector3(0, 1, 0);
   let cameraDistance = 20.5, lobbyBlend = 1, snapCam = 0, focusCam = null;
 
@@ -361,6 +361,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     battleFog.position.y = 0.02;
     battleFog.renderOrder = 2;
     scene.add(battleFog);
+    battleFogMesh = battleFog;
   }
 
   const woodMat = new THREE.MeshStandardMaterial({ color: '#8d5c34', roughness: 0.9 });
@@ -1295,8 +1296,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   function resize() {
     const width = canvas.clientWidth || window.innerWidth, height = canvas.clientHeight || window.innerHeight;
     renderer.setSize(width, height, false);
+    composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(width, height);
-    bloom.resolution.set(width / 2, height / 2);
     camera.aspect = width / Math.max(1, height);
     camera.updateProjectionMatrix();
     const scale = height * renderer.getPixelRatio() / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
@@ -1306,7 +1307,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   resize();
   window.__r3d = { renderer, composer, scene, camera, bloom, snap: () => { snapCam = 3; }, focus: (x, y, d) => { focusCam = x == null ? null : { x, y, d }; snapCam = 3; } };
   const readyPromise = loadModels();
-  let slowFrames = 0, postFxChecked = 0, postFx = new URLSearchParams(location.search).get('fx') !== '0';
+  let slowFrames = 0, postFx = new URLSearchParams(location.search).get('fx') === '1';
 
   return {
     ready: readyPromise,
@@ -1330,23 +1331,14 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         updateTurret(state.turret, now, dt);
         if (stage) { stage.visible = lobbyBlend > 0.05; stage.children.forEach(c => { if (c.geometry?.type === 'CylinderGeometry' && c.material?.blending === THREE.AdditiveBlending) c.material.opacity = 0.25 + Math.sin(now / 400 + c.position.x) * 0.1; }); }
         farmBar.sprite.visible = !state.lobby;
+        if (battleFogMesh) battleFogMesh.visible = lobbyBlend < 0.5;
         updateCountdown(state.countdown, state.wave);
         updateCamera(state.players, dt, !!state.lobby);
       }
       // Bloom is dropped automatically on slow machines.
       if (dt > 0.045) slowFrames++; else slowFrames = Math.max(0, slowFrames - 1);
       if (slowFrames > 90 && postFx) { postFx = false; console.info('Bloom disabled for performance'); }
-      if (postFx) {
-        composer.render();
-        // Some GPUs/drivers render the post-processing chain as a blank frame: detect it once and fall back.
-        if (postFxChecked < 4 && ready) {
-          postFxChecked++;
-          const gl = renderer.getContext(), px = new Uint8Array(4);
-          gl.readPixels(gl.drawingBufferWidth >> 1, gl.drawingBufferHeight >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-          if (px[3] === 0 || (px[0] + px[1] + px[2]) === 0) { if (postFxChecked >= 3) { postFx = false; console.info('Post-processing unavailable, using direct rendering'); } }
-          else postFxChecked = 99;
-        }
-      }
+      if (postFx) composer.render();
       if (!postFx) renderer.render(scene, camera);
     }
   };

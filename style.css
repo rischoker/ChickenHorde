@@ -41,3 +41,5 @@ body{font-family:'Rye',Georgia,serif}.brand,.eyebrow,.stats,.start,.hud-action,.
 @media(max-height:600px){.me-badge{top:2px;padding:4px 10px}.me-chick{width:30px;height:30px;font-size:18px}}
 .countdown{position:absolute;z-index:4;top:90px;left:50%;transform:translate(-50%,-14px) scale(.9);opacity:0;pointer-events:none;display:grid;justify-items:center;gap:2px;padding:12px 30px 14px;border-radius:22px;background:#10251fe0;border:3px solid #f4d579;box-shadow:0 12px 40px #0008;transition:opacity .2s,transform .2s;font-family:var(--arcade);text-align:center}
 .countdown.show{opacity:1;transform:translate(-50%,0) scale(1)}.countdown small{color:#f4d579;font-size:14px;letter-spacing:.08em}.countdown b{color:#fff;font-size:54px;line-height:1}.countdown em{font-style:normal;color:#ffb0b0;font-size:10px;letter-spacing:.06em}
+
+.me-badge.hurt{animation:hurtFlash .35s}@keyframes hurtFlash{30%{background:#7a1f28dd;transform:translateX(-50%) scale(1.03)}}
