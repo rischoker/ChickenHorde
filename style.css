@@ -43,3 +43,22 @@ body{font-family:'Rye',Georgia,serif}.brand,.eyebrow,.stats,.start,.hud-action,.
 .countdown.show{opacity:1;transform:translate(-50%,0) scale(1)}.countdown small{color:#f4d579;font-size:14px;letter-spacing:.08em}.countdown b{color:#fff;font-size:54px;line-height:1}.countdown em{font-style:normal;color:#ffb0b0;font-size:10px;letter-spacing:.06em}
 
 .me-badge.hurt{animation:hurtFlash .35s}@keyframes hurtFlash{30%{background:#7a1f28dd;transform:translateX(-50%) scale(1.03)}}
+
+/* V7.1: giant red wave countdown, white flash, bigger lobby QR */
+.countdown{top:50%!important;left:50%!important;transform:translate(-50%,-50%) scale(.6)!important;padding:0!important;background:none!important;border:0!important;box-shadow:none!important;color:#ff2b3a;font:clamp(140px,26vh,300px)/1 var(--arcade)!important;text-shadow:0 10px 0 #6a0d14,0 0 50px #ff2b3a99,0 0 6px #fff;-webkit-text-stroke:5px #fff1e0;text-align:center}
+.countdown.show{opacity:1!important}.countdown.pop{animation:cdPop .9s cubic-bezier(.2,1.6,.4,1) both}.countdown.banner{font-size:clamp(54px,10vh,110px)!important;color:#ffe17a;-webkit-text-stroke:3px #5a3b12;text-shadow:0 7px 0 #5a3b12,0 0 40px #ffb34099;animation:cdBanner 1.6s ease both}
+.countdown small{display:block;margin-top:10px;font:clamp(12px,2vh,20px) var(--arcade);color:#fff5d2;-webkit-text-stroke:0;text-shadow:0 2px 6px #000;letter-spacing:.06em}
+@keyframes cdPop{0%{transform:translate(-50%,-50%) scale(2.2);opacity:0}25%{transform:translate(-50%,-50%) scale(.92);opacity:1}45%{transform:translate(-50%,-50%) scale(1.05)}100%{transform:translate(-50%,-50%) scale(.85);opacity:.15}}
+@keyframes cdBanner{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}18%{transform:translate(-50%,-50%) scale(1.1);opacity:1}30%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{transform:translate(-50%,-60%) scale(1);opacity:0}}
+.flash{position:absolute;inset:0;z-index:7;background:#fff;opacity:0;pointer-events:none}.flash.go{animation:whiteFlash 1.6s ease-out}@keyframes whiteFlash{0%{opacity:0}6%{opacity:1}35%{opacity:.9}100%{opacity:0}}
+.join-box{flex-direction:column}.join-box-info{text-align:center;justify-items:center}
+.join-box img{width:min(230px,60vw)!important;height:min(230px,60vw)!important;cursor:zoom-in}
+.qr-zoom{position:fixed;z-index:30;left:50%;top:50%;transform:translate(-50%,-50%) scale(.6);opacity:0;pointer-events:none;padding:18px;border-radius:24px;background:#fff;box-shadow:0 30px 90px #000d,0 0 0 6px #ffe17a;transition:opacity .18s,transform .18s}
+.qr-zoom.show{opacity:1;transform:translate(-50%,-50%) scale(1)}.qr-zoom img{display:block;width:min(560px,80vmin);height:min(560px,80vmin);image-rendering:pixelated}
+.qr-zoom b{display:block;text-align:center;margin-top:8px;font:28px var(--arcade);color:#173a2c;letter-spacing:.14em}
+
+/* Global leaderboard tabs */
+.board-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}.board-head h2{margin:0!important}
+.board-tabs{display:flex;gap:4px}.board-tabs button{border:1px solid #ffe28b55;background:#132722;color:#cfe0d3;border-radius:9px;padding:5px 8px;font:8px var(--arcade);cursor:pointer}
+.board-tabs button.active{background:#ffe17a;color:#1b2b22;border-color:#ffe17a}.board-tabs button:disabled{opacity:.35;cursor:not-allowed}
+.score-table tr.top1 td{color:#ffe17a;font-weight:700}.score-table tr.top2 td{color:#e4e9ee}.score-table tr.top3 td{color:#f0b27a}

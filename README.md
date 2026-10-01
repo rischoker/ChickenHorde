@@ -1,6 +1,25 @@
-# Chicken Horde V7 3D — Farm Defense
+# Chicken Horde V7.2 3D — Farm Defense
 
 Static multiplayer game for GitHub Pages. The host runs the match; phones join as controllers through PeerJS/WebRTC. The game keeps the V5.2 rules and changes the host rendering to real-time 3D.
+
+## V7.2 — Leaderboard global (Supabase)
+1. **Crear la tabla** (elige una):
+   - Supabase → *SQL Editor* → *New query* → pega `supabase/migrations/20261001000000_global_leaderboard.sql` → *Run*.
+   - O con la integración de GitHub activada (working directory `.`, rama `main`): al hacer push de la carpeta `supabase/` la tabla se crea sola.
+2. **Copiar las claves**: Supabase → *Project Settings* → *API* (o *Data API*): copia el *Project URL* y la clave pública **anon / publishable**. Nunca uses la `service_role` / `secret`.
+3. En `index.html` pon: `supabaseUrl: 'https://xxxx.supabase.co', supabaseKey: 'eyJ…'`.
+
+Cada Game Over envía el puntaje de cada jugador. El lobby y el Game Over muestran pestañas 🌎 GLOBAL · 7 DAYS · THIS PC (la última es el récord local de antes). Si Supabase no responde, se muestra el récord local. La tabla solo permite leer e insertar (no editar ni borrar) y rechaza puntajes imposibles para la ola alcanzada.
+
+## V7.1 — Ajustes
+- Aliens (los que disparan láser) 50% más grandes, en grupos de máximo 3 y con la mitad de alcance del láser (335).
+- Medkit: si quien lo recoge tiene 99–100% de vida, cura a Mama Hen +20%.
+- Sonido mágico de teletransporte para los magos.
+- Sonidos propios: `powerup-laser.mp3`, `powerup-turret.mp3`, `powerup-medkit.mp3`, `next-wave.mp3`, `super-chicken.mp3`.
+- Se quitaron los árboles de las esquinas y los bordes; los power-ups que caen junto a un obstáculo se mueven al punto libre más cercano.
+- Contador gigante rojo 3-2-1 en el centro; al terminar suena `next-wave.mp3` y aparece "WAVE N".
+- **SUPER CHICKEN** (1 vez por partida): cuando Mama Hen llega al 15% lanza un huevo-cohete gigante al centro del mapa; la explosión hace un flash blanco y elimina a todos los enemigos presentes (no a los que aún no salen). Mama Hen es invulnerable durante el vuelo del huevo.
+- QR del lobby más grande; al pasar el puntero (o tocarlo) se muestra a pantalla grande.
 
 ## V7 — Novedades
 

@@ -12,10 +12,12 @@
     //   'same-origin'                     → the game itself is served by the relay server
     //   ''                                → P2P only
     // iceServers: optional TURN servers, e.g. [{urls:'turns:turn.example.com:443',username:'u',credential:'p'}]
-    window.CHICKEN_HORDE_CONFIG = { relayUrl: '', iceServers: null };
+    // supabaseUrl / supabaseKey: global leaderboard (Supabase → Project Settings → API).
+    //   supabaseKey is the PUBLIC "anon" / "publishable" key — never the service_role key.
+    window.CHICKEN_HORDE_CONFIG = { relayUrl: '', iceServers: null, supabaseUrl: 'https://vjbcqhkfvctzwecmzcqa.supabase.co', supabaseKey: 'sb_publishable_mJlZ7Ym9LXAhTkWncksX6A_Czg0mbv6' };
   </script>
   <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
-  <link rel="stylesheet" href="style.css?v=7.0.1">
+  <link rel="stylesheet" href="style.css?v=7.2.0">
 </head>
 <body>
   <main id="host" class="screen hidden">
@@ -29,12 +31,12 @@
         <div id="joinUrl" class="join-url"></div>
         <h2 class="flock-title">PLAYERS IN THE FLOCK</h2><div id="roster" class="roster"></div><div id="lobbyEmpty" class="lobby-note">Nobody yet — the stage is waiting for chicks!</div>
         <div id="assetLoadStatus" class="lobby-note asset-loading">Precargando modelos 3D en el lobby…</div><div class="lobby-note">This lobby stays open until you press <b>START GAME</b>.</div>
-        <section class="leaderboard"><h2>ALL-TIME HIGH SCORES</h2><div id="lobbyScores"></div><small>Saved in this host browser</small></section>
+        <section class="leaderboard"><div class="board-head"><h2>HIGH SCORES</h2><div class="board-tabs" data-board="lobbyScores"><button data-mode="global" class="active">🌎 GLOBAL</button><button data-mode="week">7 DAYS</button><button data-mode="local">THIS PC</button></div></div><div id="lobbyScores"></div><small class="board-note"></small></section>
       </div>
       <div class="stage-caption" aria-hidden="true"><span>THE FLOCK</span><small>Each player gets a random colour</small></div>
     </section>
-    <section id="gameOver" class="game-over hidden"><div class="game-over-card"><div class="eyebrow">FARM DEFENSE · GAME OVER</div><h1>YOUR MOM IS DEAD</h1><p id="runSummary"></p><h2>PLAYER SCORES</h2><div id="runScores"></div><section class="leaderboard"><h2>ALL-TIME HIGH SCORES</h2><div id="finalScores"></div><small>Saved in this host browser</small></section><button id="playAgain" class="start">RETURN TO LOBBY</button></div></section>
-    <div id="countdown" class="countdown"></div><div id="toast" class="toast"></div>
+    <section id="gameOver" class="game-over hidden"><div class="game-over-card"><div class="eyebrow">FARM DEFENSE · GAME OVER</div><h1>YOUR MOM IS DEAD</h1><p id="runSummary"></p><h2>PLAYER SCORES</h2><div id="runScores"></div><section class="leaderboard"><div class="board-head"><h2>HIGH SCORES</h2><div class="board-tabs" data-board="finalScores"><button data-mode="global" class="active">🌎 GLOBAL</button><button data-mode="week">7 DAYS</button><button data-mode="local">THIS PC</button></div></div><div id="finalScores"></div><small class="board-note"></small></section><button id="playAgain" class="start">RETURN TO LOBBY</button></div></section>
+    <div id="countdown" class="countdown"></div><div id="flash" class="flash"></div><div id="qrZoom" class="qr-zoom" aria-hidden="true"><img alt=""><b></b></div><div id="toast" class="toast"></div>
   </main>
   <main id="controller" class="screen controller hidden">
     <header class="controller-head"><div class="brand">🐥 CHICKEN HORDE</div><div id="connection" class="connection">CONNECTING</div></header>
@@ -48,5 +50,5 @@
     </section>
   </main>
   <main id="landing" class="screen landing hidden"><div class="lobby-card"><h1>🐥 Chicken Horde</h1><p>Open the host screen (<code>?host=1</code>) to start a lobby, then scan its QR code.</p></div></main>
-  <script src="./vendor/peerjs.min.js"></script><script src="./vendor/qrcode.js"></script><script src="app.js?v=7.0.1"></script>
+  <script src="./vendor/peerjs.min.js"></script><script src="./vendor/qrcode.js"></script><script src="app.js?v=7.2.0"></script>
 </body></html>

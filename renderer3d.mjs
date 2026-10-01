@@ -73,7 +73,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   let farmBar = null, countdownSprite = null, ready = false, lastFarmValue = -1, lastCountdown = -1;
   let battleFogMesh = null, mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0;
   const target = new THREE.Vector3(0, 1, 0);
-  let cameraDistance = 20.5, lobbyBlend = 1, snapCam = 0, focusCam = null;
+  let shake = 0, cameraDistance = 20.5, lobbyBlend = 1, snapCam = 0, focusCam = null;
 
   const actorPosition = (x, y, height = 0) => new THREE.Vector3((x - world.home.x) / UNIT, height, (y - world.home.y) / UNIT);
 
@@ -781,7 +781,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     r.canvas.texture.needsUpdate = true;
   }
 
-  const ENEMY_SIZE = { BOSS: 2.25, MUSHROOM: 2.6, ALIENBOSS: 2.7, EAGLE: 1.7, SNAKE: 0.66, WOLF: 2.2, FOX: 1.35, MOLE: 0.95, TORNADO: 1.6, ALIEN: 1.1, MAGE: 1.25, GHOST: 1.05, PLANT: 1.25 };
+  const ENEMY_SIZE = { BOSS: 2.25, MUSHROOM: 2.6, ALIENBOSS: 2.7, EAGLE: 1.7, SNAKE: 0.66, WOLF: 2.2, FOX: 1.35, MOLE: 0.95, TORNADO: 1.6, ALIEN: 1.65, MAGE: 1.25, GHOST: 1.05, PLANT: 1.25 };
   function makeEnemy(enemy) {
     const size = ENEMY_SIZE[enemy.type] || 0.95;
     const root = new THREE.Group();
@@ -1192,6 +1192,35 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         case 'eliteDeath': { const c = ELITE_STYLE[f.type]?.color || '#ff4d5e'; ringFx(pos, c, { to: 6, life: 1, width: 0.25 }); pillarFx(pos, c, { height: 9, life: 0.9, radius: 1 }); break; }
         case 'sporeBurst': { ringFx(pos, '#d78bff', { to: 4, life: 0.6 }); dust.emit({ pos: pos.clone().setY(0.6), count: 30, colors: ['#d78bff', '#c5ff7a', '#ffd27a'], speed: 3, up: 1, gravity: 0.2, life: 1.2, size: 0.25 }); break; }
         case 'turretDeploy': { const top = new THREE.Vector3(0, houseTop, 0); ringFx(top, '#ffd34d', { to: 3, life: 0.8, y: houseTop + 0.2 }); pillarFx(new THREE.Vector3(0, 0, 0), '#ffd34d', { height: houseTop + 5, life: 0.9, radius: 0.9 }); sparks.emit({ pos: top.clone().setY(houseTop + 0.6), count: 60, colors: ['#ffd34d', '#ffffff'], speed: 4, up: 4, life: 1, size: 0.25 }); turretNode.userData.popAt = now; break; }
+        case 'henHeal': { const hp = mama ? mama.position.clone() : pos; pillarFx(hp, '#ff5468', { height: 6, life: 1, radius: 1 }); ringFx(hp, '#ff8fa0', { to: 3.5, life: 0.8 }); sparks.emit({ pos: hp.clone().setY(1.5), count: 50, colors: ['#ff5468', '#ffffff', '#ffb3c0'], speed: 2.5, up: 3, gravity: -1, life: 1.2, size: 0.28 }); break; }
+        case 'superLaunch': {
+          // Giant egg rocket: rises from the nest, arcs over the farm and slams into the map centre.
+          const from = mama ? mama.position.clone() : pos, to = actorPosition(f.to.x, f.to.y), life = (f.flight || 1800) / 1000;
+          const egg = models.egg ? makeModel(models.egg, 1.6) : new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 12), new THREE.MeshStandardMaterial({ color: '#fff4dc' }));
+          const holder = new THREE.Group(); holder.add(egg); egg.position.y = -0.8;
+          const flame = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 12), new THREE.MeshBasicMaterial({ color: '#ffb340', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); flame.position.y = -1.4; flame.rotation.x = Math.PI; holder.add(flame);
+          const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), glowMat('#ffcf6b')); glow.position.y = -1.3; holder.add(glow);
+          scene.add(holder);
+          const prev = new THREE.Vector3();
+          ringFx(from, '#ffffff', { to: 3, life: 0.5 }); dust.emit({ pos: from.clone().setY(0.3), count: 40, colors: ['#e8dcc0', '#c9b48a', '#ffffff'], speed: 4, up: 2, gravity: -2, life: 1, size: 0.4 });
+          activeFx.push({ life, age: 0, update(p) {
+            prev.copy(holder.position);
+            holder.position.lerpVectors(from, to, p).setY(1.2 + Math.sin(p * Math.PI) * 13);
+            const dir = holder.position.clone().sub(prev); if (dir.lengthSq() > 1e-6) holder.quaternion.setFromUnitVectors(UPV, dir.normalize());
+            holder.rotateY(p * 12); flame.scale.y = 0.8 + Math.random() * 0.6; glow.lookAt(camera.position);
+            sparks.emit({ pos: holder.position.clone(), count: 4, colors: ['#ffcf6b', '#ff7b2a', '#ffffff'], speed: 1, up: -1, gravity: -2, life: 0.5, size: 0.35 });
+            dust.emit({ pos: holder.position.clone(), count: 2, colors: ['#d8d8d8', '#bdbdbd'], speed: 0.6, up: 0.2, gravity: 0.3, drag: 0.6, life: 1.6, size: 0.6 });
+          }, dispose() { scene.remove(holder); } });
+          break;
+        }
+        case 'superBoom': {
+          for (const [to, life, w, c] of [[14, 1.2, 0.15, '#ffffff'], [10, 0.9, 0.25, '#ffd34d'], [6, 0.7, 0.3, '#ff7b2a']]) ringFx(pos, c, { from: 0.5, to, life, width: w });
+          pillarFx(pos, '#fff3c4', { height: 16, life: 1.2, radius: 2.4 });
+          sparks.emit({ pos: pos.clone().setY(1), count: 220, colors: ['#ffffff', '#ffd34d', '#ff7b2a'], speed: 12, up: 7, gravity: -6, drag: 1, life: 1.4, size: 0.45 });
+          dust.emit({ pos: pos.clone().setY(0.5), count: 160, colors: ['#fff4dc', '#e8dcc0', '#f2c230'], speed: 9, up: 3, gravity: -2, drag: 1.4, life: 2, size: 0.55 });
+          shake = 1;
+          break;
+        }
         case 'join': { const node = playerNodes.get(f.playerId); const p = node ? node.position.clone() : pos; dust.emit({ pos: p.clone().setY(1.6), count: 60, colors: ['#ff5e5e', '#ffd45d', '#5ec8ff', '#7be37b', '#c08bff', '#ffffff'], speed: 3, up: 4, gravity: -4, drag: 1.2, life: 1.8, size: 0.16 }); ringFx(p, players.get(f.playerId)?.color || '#ffd45d', { to: 2, life: 0.7, y: 0.35 }); break; }
         default: break;
       }
@@ -1291,6 +1320,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     const up = THREE.MathUtils.lerp(0.78, 0.5, lobbyBlend), back = THREE.MathUtils.lerp(0.62, 0.86, lobbyBlend);
     camera.position.set(target.x, target.y + cameraDistance * up, target.z + cameraDistance * back);
     camera.lookAt(target);
+    if (shake > 0) { shake = Math.max(0, shake - dt * 1.4); camera.position.x += (Math.random() - 0.5) * shake * 0.9; camera.position.y += (Math.random() - 0.5) * shake * 0.9; }
   }
 
   function resize() {
