@@ -26,7 +26,8 @@ const ELITE_STYLE = {
 const DROP_STYLE = {
   SHIELD: { color: '#4fc3ff', label: 'SHIELD' }, MEDKIT: { color: '#ff5468', label: 'MEDKIT' },
   DOUBLE: { color: '#ffcc33', label: 'DOUBLE SHOT' }, RAPID: { color: '#52ffd8', label: 'RAPID FIRE' },
-  TURRET: { color: '#ffd34d', label: 'CHICKEN TURRET' }, LASER: { color: '#ff3df2', label: 'CHICKEN LASER' }
+  TURRET: { color: '#ffd34d', label: 'CHICKEN TURRET' }, LASER: { color: '#ff3df2', label: 'CHICKEN LASER' },
+  SEEKER: { color: '#ff8a3d', label: 'CHICKEN SEEKER' }, HULK: { color: '#4cff4c', label: 'CHICKEN HULK' }
 };
 
 // Small deterministic random generator so the painted map is identical on every load.
@@ -730,6 +731,32 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     return g;
   }
 
+  function makeMissile(scale = 1) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 10), new THREE.MeshStandardMaterial({ color: '#e9e4d8', metalness: 0.4, roughness: 0.4 })); g.add(body);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 10), new THREE.MeshStandardMaterial({ color: '#e0453a', roughness: 0.4 })); nose.position.y = 0.29; g.add(nose);
+    for (let i = 0; i < 4; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.12), new THREE.MeshStandardMaterial({ color: '#e0453a' })); fin.position.y = -0.16; fin.rotation.y = i * Math.PI / 2; fin.translateZ(0.07); g.add(fin); }
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 8), new THREE.MeshBasicMaterial({ color: '#ffb340', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); flame.position.y = -0.36; flame.rotation.x = Math.PI; g.add(flame);
+    g.userData.flame = flame; g.scale.setScalar(scale);
+    return g;
+  }
+  function makeLauncher() {
+    const g = new THREE.Group();
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.8, 14, 1, true), new THREE.MeshStandardMaterial({ color: '#4b5a3a', metalness: 0.5, roughness: 0.5, side: THREE.DoubleSide })); tube.rotation.x = Math.PI / 2; g.add(tube);
+    for (const z of [-0.36, 0.36]) { const rim = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.03, 8, 18), new THREE.MeshStandardMaterial({ color: '#2b2b2b', metalness: 0.7 })); rim.position.z = z; g.add(rim); }
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.18), emissiveMat('#ff8a3d', 1.6)); sight.position.set(0, 0.17, 0.05); g.add(sight);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.2, 0.09), new THREE.MeshStandardMaterial({ color: '#2b2b2b' })); grip.position.set(0, -0.17, -0.05); g.add(grip);
+    const tip = makeMissile(0.8); tip.rotation.x = Math.PI / 2; tip.position.z = 0.38; g.add(tip);
+    return g;
+  }
+  function makeFist(color = '#3f8f2a') {
+    const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.32), mat); g.add(palm);
+    for (let i = 0; i < 3; i++) { const k = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mat); k.position.set(-0.11 + i * 0.11, 0.08, 0.19); g.add(k); }
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.34), new THREE.MeshStandardMaterial({ color: '#2f6b1f' })); arm.position.z = -0.3; g.add(arm);
+    return g;
+  }
+
   function makePlayer(player) {
     const color = player.color || '#f4c542';
     const root = new THREE.Group();
@@ -746,9 +773,15 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     const weaponPivot = new THREE.Group(); weaponPivot.position.set(0.56, 0.5, 0.22);
     const rifle = makeWeapon(); rifle.position.z = 0.2; weaponPivot.add(rifle);
     const laserGun = makeLaserGun(); laserGun.position.z = 0.16; laserGun.visible = false; weaponPivot.add(laserGun);
+    const launcher = makeLauncher(); launcher.position.set(0, 0.06, 0.12); launcher.visible = false; weaponPivot.add(launcher);
+    const fists = new THREE.Group(); fists.visible = false; for (const side of [-1, 1]) { const f = makeFist(); f.position.set(side * 0.62, 0.55, 0.32); f.userData.side = side; fists.add(f); }
     const wing = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.3, 0.34), new THREE.MeshStandardMaterial({ color })); wing.position.set(-0.1, -0.04, -0.05); wing.rotation.z = -0.35; weaponPivot.add(wing);
     const muzzle = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), glowMat('#ffe9a0')); muzzle.position.set(0, 0, 0.72); muzzle.visible = false; weaponPivot.add(muzzle);
     body.add(weaponPivot);
+    body.add(fists);
+    const hulkGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, color: '#5dff3d', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false })); hulkGlow.renderOrder = 5; hulkGlow.scale.set(3.4, 3.4, 1); hulkGlow.position.y = 0.7; hulkGlow.visible = false; root.add(hulkGlow);
+    const shell = models.chick ? makeModel(models.chick, 1.3) : null;
+    if (shell) { shell.traverse(n => { if (n.isMesh) { n.material = new THREE.MeshBasicMaterial({ color: '#7dff4d', side: THREE.BackSide, transparent: true, opacity: 0.75, toneMapped: false }); n.castShadow = false; } }); shell.scale.setScalar(1.09); shell.position.y = -0.05; shell.visible = false; model.add(shell); }
     const label = makeBillboard(3.05, 0.78); label.sprite.position.set(0, 1.85, 0); root.add(label.sprite);
     const shield = new THREE.Mesh(new THREE.IcosahedronGeometry(0.92, 2), new THREE.MeshStandardMaterial({ color: '#76e8ff', emissive: '#3ad2ff', emissiveIntensity: 0.9, wireframe: true, transparent: true, opacity: 0.5 })); shield.position.y = 0.67; shield.visible = false; root.add(shield);
     const angel = new THREE.Group(); angel.visible = false;
@@ -760,7 +793,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     // Revive ring on the ground: separate object so it stays on the ground while the angel floats up.
     const revive = makeReviveRing(color);
     scene.add(root);
-    Object.assign(root.userData, { body, model, tint, aura, ring, pointer, weapon: weaponPivot, rifle, laserGun, muzzle, label, shield, angel, beams, revive, walk: 0, prev: null, lastShotSeen: 0 });
+    Object.assign(root.userData, { hulkGlow, shell, launcher, fists, baseTint: new THREE.Color(color), body, model, tint, aura, ring, pointer, weapon: weaponPivot, rifle, laserGun, muzzle, label, shield, angel, beams, revive, walk: 0, prev: null, lastShotSeen: 0 });
     return root;
   }
   function makeReviveRing(color) {
@@ -872,7 +905,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       const speed = prev.distanceTo(node.position) / Math.max(dt, 0.001);
       const body = u.body;
       body.rotation.y = Math.PI / 2 - facing;
-      const scale = lobby ? 1.55 : 1;
+      const hulk = !!player.effects?.HULK && !dead && !lobby, scale = lobby ? 1.55 : hulk ? 1.5 : 1;
       node.scale.setScalar(node.scale.x + (scale - node.scale.x) * Math.min(1, dt * 6));
       // Procedural chick animation: waddle while moving, breathe while idle, dance in the lobby, recoil when firing.
       const moving = speed > 0.6 && !dead;
@@ -889,8 +922,16 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       u.weapon.position.z = 0.22 - (firing ? 0.07 : 0);
       u.weapon.position.y = 0.5 + bob;
       u.weapon.rotation.x = firing ? -0.08 : 0;
-      const laser = !!player.effects?.LASER;
-      u.rifle.visible = !laser; u.laserGun.visible = laser;
+      const laser = !!player.effects?.LASER, seekerOn = !!player.effects?.SEEKER;
+      u.rifle.visible = !laser && !seekerOn; u.laserGun.visible = laser && !seekerOn; u.launcher.visible = seekerOn;
+      if (u.tint) u.tint.uTint.value.copy(hulk ? HULK_GREEN : u.baseTint);
+      u.fists.visible = hulk; u.hulkGlow.visible = hulk; if (u.shell) u.shell.visible = hulk;
+      if (hulk) { const pulse = 0.75 + Math.sin(now / 140) * 0.25; u.hulkGlow.material.opacity = pulse * 0.6; u.hulkGlow.scale.setScalar(3.1 + pulse * 0.6); if (u.shell) u.shell.traverse(n => { if (n.isMesh) n.material.opacity = 0.45 + pulse * 0.4; }); if (Math.random() < 0.5) sparks.emit({ pos: node.position.clone().setY(0.4 + Math.random() * 1.2), count: 1, colors: ['#5dff3d', '#b6ff8a'], speed: 0.6, up: 1.4, gravity: 0.4, radius: 0.7, life: 0.7, size: 0.22 }); if (player.dashAt && now - player.dashAt < 260) dust.emit({ pos: node.position.clone().setY(0.2), count: 3, colors: ['#5dff3d', '#8b7355'], speed: 1, up: 0.8, gravity: -2, life: 0.5, size: 0.3 }); }
+      if (hulk) {
+        const punch = player.punchAt && now - player.punchAt < 220 ? Math.sin((now - player.punchAt) / 220 * Math.PI) : 0;
+        u.fists.children.forEach((f, i) => { const alt = (Math.floor((player.punchAt || 0) / 300) % 2) === i; f.position.z = 0.32 + (alt ? punch * 0.55 : 0); f.position.y = 0.55 + Math.sin(now / 160 + i * 3) * 0.04; f.rotation.x = alt ? -punch * 0.3 : 0; });
+        if (Math.random() < 0.25) dust.emit({ pos: node.position.clone().setY(0.1), count: 1, colors: ['#3f8f2a', '#7ac14a'], speed: 0.8, up: 0.6, gravity: -1, radius: 0.6, life: 0.6, size: 0.18 });
+      }
       if (laser) { u.laserGun.userData.crystal.rotation.z += dt * 6; }
       u.muzzle.visible = firing && !laser && Math.random() < 0.8;
       if (u.muzzle.visible) { u.muzzle.rotation.z = Math.random() * 6; u.muzzle.lookAt(camera.position); }
@@ -899,12 +940,12 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       u.aura.material.color.set(hit ? '#ff273b' : player.color);
       u.ring.material.color.set(hit ? '#ff273b' : player.color);
       u.pointer.visible = !lobby && !dead;
-      drawPlate(u.label, { text: lobby ? player.name : `${player.name} · ${player.score}`, health: player.hp, color: player.color });
+      drawPlate(u.label, { text: lobby ? player.name : hulk ? `💪 ${player.name} · HULK` : `${player.name} · ${player.score}`, health: player.hp, color: hulk ? '#4cff4c' : player.color });
       const ls = lobby ? 0.62 : 1; u.label.sprite.scale.set(3.05 * ls, 0.78 * ls, 1); u.label.sprite.position.y = lobby ? 1.75 : 1.85;
       u.angel.visible = dead && !lobby;
       u.shield.visible = !dead && now < (player.effects?.SHIELD || 0);
       if (u.shield.visible) { u.shield.rotation.y += dt * 0.8; u.shield.material.opacity = 0.35 + Math.sin(now / 120) * 0.12; }
-      u.weapon.visible = !dead;
+      u.weapon.visible = !dead && !hulk;
       node.visible = player.connected !== false || dead;
       if (dead && !lobby) {
         const t = Math.max(0, (now - (player.deathAt || now)) / 1000);
@@ -960,7 +1001,32 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         case 'FOX': { const jump = now < enemy.jumpUntil ? Math.sin((enemy.jumpUntil - now) / 360 * Math.PI) * 0.75 : 0; body.position.y = jump + Math.abs(Math.sin(t * 11)) * 0.08; body.rotation.x = Math.sin(t * 11) * 0.08 - jump * 0.3; break; }
         case 'EAGLE': { const dive = now < (enemy.dashUntil || 0); body.position.y = (dive ? 0.7 : 1.7) + Math.sin(t * 2.4) * 0.15; body.rotation.x = dive ? 0.35 : 0; body.rotation.z = Math.sin(t * 1.3) * 0.25; break; }
         case 'GHOST': { body.position.y = 0.25 + Math.sin(t * 2.6) * 0.15; body.rotation.z = Math.sin(t * 1.8) * 0.1; body.traverse(n => { if (n.isMesh && n.material.transparent) n.material.opacity = 0.78 + Math.sin(t * 3.1) * 0.14; }); break; }
-        case 'PLANT': { const j = body.userData.jaws; body.rotation.z = Math.sin(t * 1.6) * 0.06; if (j) { const bite = enemy.attackAt && now - enemy.attackAt < 350 ? Math.sin((now - enemy.attackAt) / 350 * Math.PI) : 0; j.top.rotation.x = -0.35 - bite * 0.6 - Math.sin(t * 3) * 0.05; j.head.rotation.x = -0.3 + bite * 0.4; } break; }
+        case 'PLANT': {
+          const em = enemy.emergeAt || 0;
+          if (!u.seed) {
+            u.seed = new THREE.Group();
+            const seed = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshStandardMaterial({ color: '#8a5a2b', roughness: 0.6 })); seed.scale.set(0.8, 1.15, 0.8); u.seed.add(seed); u.seedBall = seed;
+            const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), glowMat('#b8ed53')); seed.add(glow); u.seedGlow = glow;
+            const mound = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 1 })); mound.scale.y = 0.35; u.seed.add(mound); u.seedMound = mound;
+            const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.9, 32), new THREE.MeshBasicMaterial({ color: '#b8ed53', transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; u.seed.add(ring); u.seedRing = ring;
+            node.add(u.seed);
+          }
+          if (now < em) {
+            // Telegraph: a glowing seed falls, digs into a dirt mound, then the plant sprouts.
+            const total = Math.max(1, em - (enemy.bornAt || em - 2000)), p = 1 - (em - now) / total;
+            u.seed.visible = true;
+            const fall = Math.min(1, p / 0.3);
+            u.seedBall.visible = p < 0.75; u.seedBall.position.y = 6 * (1 - fall) * (1 - fall) + 0.12 + (fall >= 1 ? Math.abs(Math.sin(p * 30)) * 0.05 : 0); u.seedGlow.lookAt(camera.position);
+            u.seedMound.scale.set(0.3 + p * 0.8, 0.12 + p * 0.3, 0.3 + p * 0.8);
+            u.seedRing.material.opacity = 0.35 + Math.sin(now / 90) * 0.3; u.seedRing.scale.setScalar(0.8 + p * 0.4);
+            if (fall >= 1 && Math.random() < 0.4) dust.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 1, colors: ['#6b4a2b', '#b8ed53'], speed: 0.8, up: 1.6, gravity: -5, radius: 0.3, life: 0.5, size: 0.14 });
+            const grow = Math.max(0, (p - 0.75) / 0.25);
+            body.visible = grow > 0; body.scale.set(0.15 + grow * 0.85, 0.05 + grow * 0.95, 0.15 + grow * 0.85);
+            if (!u.landed && fall >= 1) { u.landed = true; dust.emit({ pos: new THREE.Vector3(position.x, 0.2, position.z), count: 14, colors: ['#6b4a2b', '#8a5a2b'], speed: 2, up: 2.5, gravity: -8, life: 0.5, size: 0.18 }); }
+            break;
+          }
+          body.visible = true; u.seed.visible = now - em < 900; if (u.seed.visible) { const k = 1 - (now - em) / 900; u.seedMound.scale.set(1.1 * k + 0.01, 0.42 * k + 0.01, 1.1 * k + 0.01); u.seedBall.visible = false; u.seedRing.material.opacity = 0.6 * k; }
+          const j = body.userData.jaws; body.rotation.z = Math.sin(t * 1.6) * 0.06; if (j) { const bite = enemy.attackAt && now - enemy.attackAt < 350 ? Math.sin((now - enemy.attackAt) / 350 * Math.PI) : 0; j.top.rotation.x = -0.35 - bite * 0.6 - Math.sin(t * 3) * 0.05; j.head.rotation.x = -0.3 + bite * 0.4; } break; }
         case 'ALIEN': { body.position.y = 0.15 + Math.sin(t * 3) * 0.08; body.rotation.z = Math.sin(t * 2.2) * 0.12; break; }
         case 'ALIENBOSS': { body.position.y = 0.6 + Math.sin(t * 2) * 0.15; body.rotation.z = Math.sin(t * 1.4) * 0.08; if (u.tractor) { u.tractor.material.opacity = 0.3 + Math.sin(t * 6) * 0.15; u.tractor.rotation.y += dt; } if (Math.random() < 0.3) sparks.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 1, color: '#c46bff', speed: 0.2, up: 1.6, gravity: 0.6, radius: 0.9, life: 0.8, size: 0.2 }); break; }
         case 'MAGE': { body.position.y = Math.abs(Math.sin(t * 6)) * 0.08; if (u.orb) { u.orb.position.y = 0.95 + Math.sin(t * 4) * 0.08; u.orb.children[0].lookAt(camera.position); } if (Math.random() < 0.15) sparks.emit({ pos: node.localToWorld(new THREE.Vector3(0.4, 1, 0.2)), count: 1, color: '#b37bff', speed: 0.2, up: 0.6, gravity: 0.4, life: 0.6, size: 0.12 }); break; }
@@ -1009,7 +1075,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       for (const entry of u.materialColors) entry.mat.color.copy(hitFlash ? FLASH : entry.color);
       if (enemy.hitUntil && enemy.hitUntil !== u.lastHit) { u.lastHit = enemy.hitUntil; sparks.emit({ pos: new THREE.Vector3(position.x, 0.6, position.z), count: 5, colors: ['#fff3a0', '#ffb347'], speed: 3, up: 2, life: 0.25, size: 0.14 }); }
       u.health.sprite.visible = enemy.elite || enemy.hp < enemy.maxHp;
-      if (enemy.type === 'MOLE' && now < (enemy.emergeAt || 0)) u.health.sprite.visible = false;
+      if ((enemy.type === 'MOLE' || enemy.type === 'PLANT') && now < (enemy.emergeAt || 0)) u.health.sprite.visible = false;
       drawHealth(u.health, enemy);
       u.health.sprite.position.y = u.height + (enemy.elite ? 0.75 : 0.35) + (enemy.type === 'EAGLE' ? 1.6 : enemy.type === 'ALIENBOSS' ? 0.6 : 0);
     }
@@ -1019,7 +1085,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       scene.remove(node); enemyNodes.delete(enemy);
     }
   }
-  const FLASH = new THREE.Color('#ff5b5b');
+  const FLASH = new THREE.Color('#ff5b5b'), HULK_GREEN = new THREE.Color('#2f7d1f');
 
   // ------------------------------------------------------------------ projectiles & drops
   const shotGeo = new THREE.CapsuleGeometry(0.075, 0.34, 4, 8);
@@ -1045,6 +1111,12 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.42, 0.14, 16), emissiveMat(color, 0.9, { metalness: 0.7 })); base.position.y = -0.3; g.add(base);
       const chick = makeModel(models.turret, 0.72) || makeFallbackActor('PLAYER'); chick.position.y = -0.24; g.add(chick);
       for (const x of [-0.1, 0.1]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4, 8), new THREE.MeshStandardMaterial({ color: '#3b4650', metalness: 0.8 })); b.rotation.x = Math.PI / 2; b.position.set(x, 0.02, 0.42); g.add(b); }
+    } else if (type === 'SEEKER') {
+      const l = makeLauncher(); l.scale.setScalar(1.15); l.rotation.y = Math.PI / 4; g.add(l);
+      for (const x of [-0.25, 0.25]) { const m = makeMissile(0.9); m.position.set(x, 0.25, 0); g.add(m); }
+    } else if (type === 'HULK') {
+      const f = makeFist('#4caf2a'); f.scale.setScalar(1.6); f.rotation.x = -Math.PI / 2; f.position.y = 0.05; g.add(f);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 28), emissiveMat('#4cff4c', 2)); ring.rotation.x = Math.PI / 2; g.add(ring);
     } else if (type === 'LASER') {
       const gun = makeLaserGun(); gun.scale.setScalar(1.25); gun.rotation.y = Math.PI / 4; g.add(gun);
       const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.16), emissiveMat('#7ff6ff', 2.4)); crystal.position.y = 0.36; crystal.scale.y = 1.5; g.add(crystal); g.userData.crystal = crystal;
@@ -1054,7 +1126,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   }
   function makeDrop(item) {
     const style = DROP_STYLE[item.type] || DROP_STYLE.SHIELD;
-    const big = item.type === 'TURRET' || item.type === 'LASER';
+    const big = ['TURRET', 'LASER', 'SEEKER', 'HULK'].includes(item.type);
     const node = new THREE.Group();
     const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.62, big ? 7 : 4.2, 20, 1, true), new THREE.MeshBasicMaterial({ color: style.color, map: pillarTexture, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
     pillar.position.y = (big ? 7 : 4.2) / 2; node.add(pillar);
@@ -1101,7 +1173,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       seen.add(item);
       let node = pool.get(item);
       if (!node) {
-        if (kind === 'shot') node = new THREE.Mesh(shotGeo, shotMat(item.color || '#fff1a2'));
+        if (kind === 'shot') node = item.missile ? makeMissile(1.3) : new THREE.Mesh(shotGeo, shotMat(item.color || '#fff1a2'));
         else if (kind === 'fireball') {
           const color = item.kind === 'seed' ? '#b8ed53' : item.kind === 'spore' ? '#d78bff' : '#ff6a2d';
           node = new THREE.Group();
@@ -1129,6 +1201,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         node.position.copy(actorPosition(item.x, item.y, h));
         node.rotation.set(Math.PI / 2, 0, 0); node.rotation.z = 0;
         node.quaternion.setFromUnitVectors(UPV, new THREE.Vector3(item.dx, 0, item.dy).normalize());
+        if (item.missile) { node.position.y = 0.75; node.userData.flame.scale.y = 0.7 + Math.random() * 0.7; dust.emit({ pos: node.position.clone(), count: 1, colors: ['#d8d8d8', '#bdbdbd'], speed: 0.2, up: 0.3, gravity: 0.2, drag: 0.8, life: 0.7, size: 0.22 }); if (Math.random() < 0.6) sparks.emit({ pos: node.position.clone(), count: 1, colors: ['#ffb340', '#ff7b2a'], speed: 0.4, up: 0, gravity: 0, life: 0.25, size: 0.2 }); }
       } else {
         node.position.copy(actorPosition(item.x, item.y, 0.5 + Math.sin(now / 120) * 0.05));
         node.userData.halo?.lookAt(camera.position);
@@ -1221,6 +1294,11 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
           shake = 1;
           break;
         }
+        case 'missileHit': { ringFx(pos, '#ff8a3d', { to: 1.6, life: 0.35, y: 0.3 }); sparks.emit({ pos: pos.clone().setY(0.7), count: 16, colors: ['#ffb340', '#ff7b2a', '#ffffff'], speed: 4, up: 2.5, life: 0.4, size: 0.25 }); dust.emit({ pos: pos.clone().setY(0.4), count: 6, colors: ['#9a9a9a', '#6b6b6b'], speed: 1.5, up: 1.5, gravity: -1, life: 0.8, size: 0.35 }); break; }
+        case 'punch': { ringFx(pos, '#4cff4c', { from: 0.2, to: f.hits ? 1.8 : 1, life: 0.3, y: 0.2, width: 0.25 }); dust.emit({ pos: pos.clone().setY(0.3), count: f.hits ? 14 : 5, colors: ['#8b7355', '#a8916b', '#4cff4c'], speed: 3, up: 2, gravity: -6, life: 0.5, size: 0.22 }); if (f.hits) shake = Math.max(shake, 0.35); break; }
+        case 'hulk': { pillarFx(pos, '#4cff4c', { height: 7, life: 0.9, radius: 0.9 }); ringFx(pos, '#4cff4c', { to: 4, life: 0.7, width: 0.25 }); sparks.emit({ pos: pos.clone().setY(0.8), count: 60, colors: ['#4cff4c', '#2f7d1f', '#ffffff'], speed: 5, up: 4, gravity: -4, life: 0.9, size: 0.28 }); shake = Math.max(shake, 0.6); break; }
+        case 'hulkDash': { ringFx(pos, '#5dff3d', { from: 0.3, to: 1.6, life: 0.3, y: 0.15, width: 0.3 }); dust.emit({ pos: pos.clone().setY(0.2), count: 14, colors: ['#8b7355', '#a8916b', '#5dff3d'], speed: 2.5, up: 1.2, gravity: -5, life: 0.5, size: 0.26 }); break; }
+        case 'hulkEnd': { ringFx(pos, '#9cff9c', { to: 2, life: 0.5 }); dust.emit({ pos: pos.clone().setY(0.8), count: 20, colors: ['#4cff4c', '#ffffff'], speed: 2, up: 2, gravity: -2, life: 0.8, size: 0.2 }); break; }
         case 'join': { const node = playerNodes.get(f.playerId); const p = node ? node.position.clone() : pos; dust.emit({ pos: p.clone().setY(1.6), count: 60, colors: ['#ff5e5e', '#ffd45d', '#5ec8ff', '#7be37b', '#c08bff', '#ffffff'], speed: 3, up: 4, gravity: -4, drag: 1.2, life: 1.8, size: 0.16 }); ringFx(p, players.get(f.playerId)?.color || '#ffd45d', { to: 2, life: 0.7, y: 0.35 }); break; }
         default: break;
       }
@@ -1361,6 +1439,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         updateTurret(state.turret, now, dt);
         if (stage) { stage.visible = lobbyBlend > 0.05; stage.children.forEach(c => { if (c.geometry?.type === 'CylinderGeometry' && c.material?.blending === THREE.AdditiveBlending) c.material.opacity = 0.25 + Math.sin(now / 400 + c.position.x) * 0.1; }); }
         farmBar.sprite.visible = !state.lobby;
+        { const on = !!state.turret?.active, wy = on ? houseTop + 0.55 : houseTop + 1.25, wx = on ? 4.3 : 0, k = Math.min(1, dt * 4); farmBar.sprite.position.y += (wy - farmBar.sprite.position.y) * k; farmBar.sprite.position.x += (wx - farmBar.sprite.position.x) * k; }
         if (battleFogMesh) battleFogMesh.visible = lobbyBlend < 0.5;
         updateCountdown(state.countdown, state.wave);
         updateCamera(state.players, dt, !!state.lobby);

@@ -1,6 +1,13 @@
-# Chicken Horde V7.2 3D — Farm Defense
+# Chicken Horde V7.3.1 3D — Farm Defense
 
 Static multiplayer game for GitHub Pages. The host runs the match; phones join as controllers through PeerJS/WebRTC. The game keeps the V5.2 rules and changes the host rendering to real-time 3D.
+
+## V7.3 — Nuevas armas y ajustes
+- **CHICKEN SEEKER**: el Mushroom King de la ola 8 lo suelta al 100%, y de nuevo cada 5 olas (13, 18, 23…). Lanzacohetes con misiles rastreadores: mismo alcance que la metralleta, 3 de daño por misil (laser 2 + 50%), ráfaga más lenta (260 ms; 150 ms con Rapid Fire). Los misiles vuelan por encima de los obstáculos. Se pierde al caer, igual que el láser.
+- **CHICKEN HULK**: cae solo en la ola 8 y luego cada 8 olas (16, 24…). Dura hasta el final de esa ola; al empezar la siguiente el jugador vuelve a la normalidad con todo lo que tenía antes. Pollito 50% más grande, verde oscuro con brillo verde, solo golpes cuerpo a cuerpo con un "pío pío" muy grave, **dash** automático hacia el enemigo al que apunta (hasta ~260 de distancia, cada 1.1 s), 60% menos daño recibido y no puede recoger power-ups. Mata enemigos normales de un golpe; los elites reciben triple daño (9 por golpe).
+- **Plantas**: una semilla brillante cae, se entierra en un montículo y la planta brota (~2 s) antes de poder disparar o recibir daño. Su daño bajó 10%.
+- El cartel de MAMA HEN se mueve a un lado del gallinero cuando la Chicken Turret está activa.
+- Voces: `assets/audio/powerup-seeker.mp3` y `assets/audio/powerup-hulk.mp3`.
 
 ## V7.2 — Leaderboard global (Supabase)
 1. **Crear la tabla** (elige una):
