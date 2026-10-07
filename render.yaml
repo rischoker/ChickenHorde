@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chicken-horde
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: SUPABASE_URL
+        value: https://vjbcqhkfvctzwecmzcqa.supabase.co
+      - key: SUPABASE_KEY
+        value: sb_publishable_mJlZ7Ym9LXAhTkWncksX6A_Czg0mbv6

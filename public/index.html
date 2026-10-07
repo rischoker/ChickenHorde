@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#172c2b"><title>Chicken Horde V7 3D</title>
+  <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
+  <link rel="stylesheet" href="style.css?v=8.0.0">
+</head>
+<body>
+  <main id="host" class="screen hidden">
+    <header class="hud"><div class="brand">🐥 CHICKEN HORDE <small>FARM DEFENSE</small></div><div class="stats"><span>WAVE <b id="wave">0</b></span><span>ENEMIES <b id="enemyCount">0</b></span><span>FARM <b id="farmHp">100%</b></span><span>PLAYERS <b id="playerCount">0</b></span></div><div class="players-menu"><button id="playersBtn" class="hud-action" aria-expanded="false">PLAYERS</button><div id="playersPanel" class="players-panel"><strong>ROOM PLAYERS · TAP KICK TO REMOVE</strong><div id="rosterInGame" class="roster"></div></div></div><div class="join-qr-wrap"><button id="joinQrBtn" class="hud-action" aria-expanded="false" disabled>JOIN IN GAME · QR</button><div id="joinQrPanel" class="join-qr-panel"><strong>SCAN TO JOIN</strong><img id="qrLarge" alt="Large QR code to join the current game"><div id="qrJoinHint">Works in the lobby and during play</div></div></div><div class="music-control"><button id="musicBtn" class="hud-action" aria-label="Toggle background music">♫ MUSIC OFF</button><input id="musicVolume" type="range" min="0" max="100" value="32" aria-label="Music volume"><span id="musicVolumeLabel">32%</span></div><button id="soundBtn" class="start sound-toggle">SFX OFF</button><button id="startBtn" class="start">START GAME</button></header>
+    <canvas id="game"></canvas><audio id="bgMusic" src="./assets/audio/farm-rave.mp3" preload="metadata" loop></audio>
+    <section id="lobby" class="lobby">
+      <div class="lobby-card">
+        <div class="eyebrow">ROOM IS OPEN</div><h1>Gather the flock</h1>
+        <p>Scan the code with your phone. Your chick appears on the stage as soon as you join.</p>
+        <div class="join-box"><img id="qr" alt="QR code to join this lobby"><div class="join-box-info"><small>ROOM CODE</small><div id="roomCode" class="room-code">·····</div><div id="netStatus" class="net-status"></div></div></div>
+        <div id="joinUrl" class="join-url"></div>
+        <h2 class="flock-title">PLAYERS IN THE FLOCK</h2><div id="roster" class="roster"></div><div id="lobbyEmpty" class="lobby-note">Nobody yet — the stage is waiting for chicks!</div>
+        <div id="assetLoadStatus" class="lobby-note asset-loading">Precargando modelos 3D en el lobby…</div><div class="lobby-note">This lobby stays open until you press <b>START GAME</b>.</div>
+        <section class="leaderboard"><div class="board-head"><h2>HIGH SCORES</h2><div class="board-tabs" data-board="lobbyScores"><button data-mode="global" class="active">🌎 GLOBAL</button><button data-mode="week">7 DAYS</button><button data-mode="local">THIS PC</button></div></div><div id="lobbyScores"></div><small class="board-note"></small></section>
+      </div>
+      <div class="stage-caption" aria-hidden="true"><span>THE FLOCK</span><small>Each player gets a random colour</small></div>
+    </section>
+    <section id="gameOver" class="game-over hidden"><div class="game-over-card"><div class="eyebrow">FARM DEFENSE · GAME OVER</div><h1>YOUR MOM IS DEAD</h1><p id="runSummary"></p><h2>PLAYER SCORES</h2><div id="runScores"></div><section class="leaderboard"><div class="board-head"><h2>HIGH SCORES</h2><div class="board-tabs" data-board="finalScores"><button data-mode="global" class="active">🌎 GLOBAL</button><button data-mode="week">7 DAYS</button><button data-mode="local">THIS PC</button></div></div><div id="finalScores"></div><small class="board-note"></small></section><button id="playAgain" class="start">RETURN TO LOBBY</button></div></section>
+    <div id="countdown" class="countdown"></div><div id="flash" class="flash"></div><div id="qrZoom" class="qr-zoom" aria-hidden="true"><img alt=""><b></b></div><div id="toast" class="toast"></div>
+  </main>
+  <main id="controller" class="screen controller hidden">
+    <header class="controller-head"><div class="brand">🐥 CHICKEN HORDE</div><div id="connection" class="connection">CONNECTING</div></header>
+    <section id="joinPanel" class="join-panel"><div class="eyebrow">FARM DEFENSE</div><h1>Join the flock</h1><label for="playerName">Your name</label><input id="playerName" type="text" maxlength="12" placeholder="e.g. LEO" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go"><button id="joinBtn" class="start join-button">JOIN GAME</button><div id="joinStatus" class="join-status">Waiting for the host…</div></section>
+    <section id="controls" class="controls hidden">
+      <div id="meBadge" class="me-badge hidden"><span class="me-chick">🐥</span><div class="me-info"><b id="meName">CHICK</b><div class="me-hp"><i id="meHp"></i></div><small id="meState">In the lobby</small></div></div>
+      <div class="control-help"><span>MOVE</span><span>AIM + FIRE</span></div>
+      <div class="sticks"><div class="stick-zone" id="moveZone"><span class="stick-label">MOVE</span><div class="stick-base"><div class="stick-knob"></div></div></div><div class="stick-zone" id="aimZone"><span class="stick-label">AIM + FIRE</span><div class="stick-base"><div class="stick-knob"></div></div></div></div>
+      <button id="fire" class="fire" aria-label="Fire">FIRE</button>
+      <div class="tips">LEFT THUMB · MOVE <span>RIGHT THUMB · AIM</span></div>
+    </section>
+  </main>
+  <main id="landing" class="screen landing hidden"><div class="lobby-card"><h1>🐥 Chicken Horde</h1><p>Open the host screen (<code>?host=1</code>) to start a lobby, then scan its QR code.</p></div></main>
+  <script src="./vendor/socket.io.min.js"></script><script src="./vendor/qrcode.js"></script><script src="app.js?v=8.0.0"></script>
+</body></html>
