@@ -1,17 +1,22 @@
 {
   "name": "chicken-horde",
-  "version": "8.0.0",
+  "version": "8.0.2",
   "private": true,
-  "description": "Chicken Horde Farm Defense — Express + Socket.IO server for Render. Host screen + phones as controllers.",
+  "description": "Chicken Horde Farm Defense \u2014 Express + Socket.IO server for Render. Host screen + phones as controllers.",
   "main": "server.js",
   "scripts": {
+    "build": "node build.js",
+    "postinstall": "node build.js",
     "start": "node server.js",
-    "dev": "PORT=3000 node server.js"
+    "dev": "node build.js && PORT=3000 node server.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "compression": "^1.7.5",
     "express": "^4.21.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "esbuild": "^0.24.0"
   }
 }

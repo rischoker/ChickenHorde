@@ -62,3 +62,10 @@ body{font-family:'Rye',Georgia,serif}.brand,.eyebrow,.stats,.start,.hud-action,.
 .board-tabs{display:flex;gap:4px}.board-tabs button{border:1px solid #ffe28b55;background:#132722;color:#cfe0d3;border-radius:9px;padding:5px 8px;font:8px var(--arcade);cursor:pointer}
 .board-tabs button.active{background:#ffe17a;color:#1b2b22;border-color:#ffe17a}.board-tabs button:disabled{opacity:.35;cursor:not-allowed}
 .score-table tr.top1 td{color:#ffe17a;font-weight:700}.score-table tr.top2 td{color:#e4e9ee}.score-table tr.top3 td{color:#f0b27a}
+
+/* Start page */
+.landing-card{text-align:center;display:grid;gap:12px;justify-items:center;width:min(440px,92vw)!important}
+.landing-host{display:block;width:100%;text-decoration:none;font-size:18px;padding:18px}
+.landing-or{font:10px var(--arcade);color:#a9c3b3;letter-spacing:.1em}
+.landing-join{display:flex;gap:8px;width:100%}.landing-join input{flex:1;min-width:0;padding:14px;border-radius:12px;border:1px solid #527064;background:#10231f;color:#ffe17a;font:22px var(--arcade);letter-spacing:.2em;text-align:center;text-transform:uppercase}
+.landing-card{grid-template-columns:minmax(0,1fr);justify-items:stretch;margin:16px!important;padding:22px 18px!important;overflow:hidden!important}.landing-card h1{font-size:clamp(30px,9vw,44px)!important;overflow-wrap:anywhere}.landing-card p{margin:0!important;max-width:none!important}.landing-join button{flex:0 0 auto;padding:14px 18px}
