@@ -9,11 +9,15 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const UNIT = 40;
+const WEAPON_FLIP = true;
+const COOP_YAW = 0;
 const FILES = [
   ['ground', 'ground.glb'], ['chick', 'chick.glb'], ['mama', 'mama-hen.glb'], ['fox', 'fox.glb'],
   ['wolf', 'wolf.glb'], ['eagle', 'eagle.glb'], ['snake', 'snake.glb'], ['boss', 'chupacabras.glb'],
   ['egg', 'egg.glb'], ['grass', 'grass.glb'], ['house', 'hen-house.glb'],
   ['turret', 'chicken-turret.glb'], ['tornado', 'tornado.glb'], ['wizard', 'wizard.glb'], ['alien', 'alien.glb'], ['mushroom', 'mushroom-king.glb'],
+  ['coop', 'chicken-coop.glb'], ['mushnub', 'mushnub.glb'], ['mech', 'mech.glb'],
+  ['blasterD', 'weapons/blaster-d.glb'], ['blasterE', 'weapons/blaster-e.glb'], ['blasterO', 'weapons/blaster-o.glb'],
   ['treeA', 'nature/Tree_1_A_Color1.gltf'], ['treeB', 'nature/Tree_3_B_Color1.gltf'], ['rock', 'nature/Rock_1_A_Color1.gltf']
 ];
 // Yaw corrections so every model faces +Z (the renderer's "forward").
@@ -53,7 +57,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
-  scene.add(new THREE.HemisphereLight('#fff4dc', '#4f7a45', 1.3));
+  const hemi = new THREE.HemisphereLight('#fff4dc', '#4f7a45', 1.3);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff0cd', 2.5);
   sun.position.set(-15, 26, 17);
   sun.castShadow = true;
@@ -72,20 +77,20 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   const playerNodes = new Map(), enemyNodes = new Map(), projectileNodes = new Map(), fireballNodes = new Map(), dropNodes = new Map(), beamNodes = new Map(), bloodNodes = new Map();
   const seenFx = new Set(), activeFx = [];
   let farmBar = null, countdownSprite = null, ready = false, lastFarmValue = -1, lastCountdown = -1;
-  let battleFogMesh = null, mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0;
+  let henBubbleSuper = false, lantern = null, nightBlend = 0, battleFogMesh = null, mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0;
   const target = new THREE.Vector3(0, 1, 0);
   let shake = 0, cameraDistance = 20.5, lobbyBlend = 1, snapCam = 0, focusCam = null;
 
   const actorPosition = (x, y, height = 0) => new THREE.Vector3((x - world.home.x) / UNIT, height, (y - world.home.y) / UNIT);
 
   function statusUpdate(done, failed) {
-    if (failed) status.textContent = `Modelos 3D precargados (${done}/${FILES.length}); algunos usarán respaldo.`;
-    else if (done >= FILES.length) status.textContent = 'Modelos 3D listos. Ya puedes abrir la partida.';
-    else status.textContent = `Precargando modelos 3D en el lobby… ${done}/${FILES.length}`;
+    if (failed) status.textContent = `3D models loaded (${done}/${FILES.length}); some use fallbacks.`;
+    else if (done >= FILES.length) status.textContent = '3D models ready. You can start the match.';
+    else status.textContent = `Preloading 3D models… ${done}/${FILES.length}`;
   }
 
   async function loadModels() {
-    if (document.fonts?.load) await Promise.race([Promise.all([document.fonts.load('12px Bungee'), document.fonts.load('12px Rye')]), new Promise(resolve => setTimeout(resolve, 1400))]);
+    if (document.fonts?.load) await Promise.race([document.fonts.load('12px Bungee'), new Promise(resolve => setTimeout(resolve, 1400))]);
     let done = 0, failed = 0;
     statusUpdate(done, false);
     startButton.disabled = true;
@@ -96,14 +101,14 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         modelAnimations[key] = data.animations || [];
       } catch (error) {
         failed++;
-        console.warn(`No se pudo cargar el modelo ${file}; se usará un modelo de respaldo.`, error);
+        console.warn(`Could not load model ${file}; using a fallback.`, error);
       } finally { done++; statusUpdate(done, failed > 0); }
     }));
     try {
       const materials = await new MTLLoader().loadAsync('./assets/models/weapon/materials.mtl');
       materials.preload();
       models.rifle = await new OBJLoader().setMaterials(materials).loadAsync('./assets/models/weapon/model.obj');
-    } catch (error) { failed++; console.warn('Capacitor Rifle no cargó; se usará un arma geométrica de respaldo.', error); }
+    } catch (error) { failed++; console.warn('Capacitor Rifle failed to load; using a fallback weapon.', error); }
     buildMap();
     ready = true;
     statusUpdate(done, failed > 0);
@@ -151,7 +156,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       const mixer = new THREE.AnimationMixer(model);
       const find = re => clips.find(c => re.test(c.name) && !/\|/.test(c.name) === false) || clips.find(c => re.test(c.name));
       const actions = {};
-      for (const [state, re] of [['walk', modelKey === 'wolf' ? /Gallop$/ : /Walk/], ['run', /Run|Gallop$/], ['idle', /Idle$/], ['attack', /Punch|Attack|Bite_Front|Weapon/], ['hit', /HitRe/], ['dance', /Dance|Wave|Yes/]]) {
+      for (const [state, re] of [['walk', modelKey === 'wolf' ? /Gallop$/ : /Walk/], ['run', /Run|Gallop$/], ['idle', /Idle$/], ['attack', /Punch|Attack|Bite_Front|Weapon/], ['hit', /HitRe/], ['dance', /Dance|Wave|Yes/], ['jump', /\|Jump$/], ['shoot', /Shoot_Small|Shoot_Big/]]) {
         const clip = find(re);
         if (clip) actions[state] = mixer.clipAction(clip);
       }
@@ -472,7 +477,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   function buildHouseAndHen() {
     const home = actorPosition(world.home.x, world.home.y);
     let house;
-    if (models.house) { house = makeModel(models.house, 3.4); house.position.copy(home); house.rotation.y = Math.PI; scene.add(house); }
+    if (models.coop) { house = makeModel(models.coop, 3.9); house.position.copy(home); house.rotation.y = COOP_YAW; scene.add(house); }
+    else if (models.house) { house = makeModel(models.house, 3.4); house.position.copy(home); house.rotation.y = Math.PI; scene.add(house); }
     else {
       house = new THREE.Group();
       const box = new THREE.Mesh(new THREE.BoxGeometry(3.3, 2.7, 2.7), new THREE.MeshStandardMaterial({ color: '#86593a' })); box.position.y = 1.35; house.add(box);
@@ -495,6 +501,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       mama.position.copy(nestPos).setY(0.12);
       scene.add(mama);
     }
+    lantern = new THREE.PointLight('#ffb560', 0, 16, 1.6); lantern.position.set(0, 2.2, 2.4); scene.add(lantern);
     farmBar = makeBillboard(4.4, 1.1); farmBar.sprite.position.set(0, houseTop + 1.25, 0); scene.add(farmBar.sprite);
     henBubble = makeBillboard(2.7, 1.35, 512, 256); henBubble.sprite.visible = false; henBubble.sprite.center.set(0.15, 0); scene.add(henBubble.sprite);
     drawBubble();
@@ -586,7 +593,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     g.fillStyle = elite ? color : health > 55 ? '#72d77f' : health > 25 ? '#f2c64c' : '#fa6262'; rounded(g, 25, 80, 462 * Math.max(0, Math.min(100, health)) / 100, 22, 9); g.fill();
     texture.needsUpdate = true;
   }
-  function drawBubble() {
+  function drawBubble(custom = null) {
     const { context: g, texture } = henBubble;
     g.clearRect(0, 0, 512, 128);
     g.fillStyle = '#fffdf2'; g.strokeStyle = '#d6283b'; g.lineWidth = 6;
@@ -594,8 +601,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     g.beginPath(); g.moveTo(80, 92); g.lineTo(56, 124); g.lineTo(122, 94); g.closePath(); g.fill(); g.stroke();
     g.fillStyle = '#fffdf2'; g.fillRect(84, 88, 34, 9);
     g.fillStyle = '#d6283b'; g.font = '900 54px Bungee, "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('CLUCK!!', 265, 46);
-    g.fillStyle = '#5a3b2a'; g.font = '700 17px Bungee, sans-serif'; g.fillText('HELP ME, CHICKS!', 265, 82);
+    g.fillText(custom ? custom[0] : 'CLUCK!!', 265, 46);
+    g.fillStyle = '#5a3b2a'; g.font = '700 17px Bungee, sans-serif'; g.fillText(custom ? custom[1] : 'HELP ME, CHICKS!', 265, 82);
     texture.needsUpdate = true;
   }
 
@@ -662,8 +669,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
 
   function actorFor(type, size) {
     if (type === 'TORNADO') return makeTornado();
-    const key = ({ FOX: 'fox', WOLF: 'wolf', EAGLE: 'eagle', SNAKE: 'snake', BOSS: 'boss', MAGE: 'wizard', ALIEN: 'alien', ALIENBOSS: 'alien', MUSHROOM: 'mushroom' })[type];
-    return makeModel(key ? models[key] : null, size, { tint: type === 'ALIENBOSS' ? '#b06bff' : null }) || makeFallbackActor(type);
+    const key = ({ FOX: 'fox', WOLF: 'wolf', EAGLE: 'eagle', SNAKE: 'snake', BOSS: 'boss', MAGE: 'wizard', ALIEN: 'alien', ALIENBOSS: 'alien', MUSHROOM: 'mushroom', MUSHNUB: 'mushnub', MECHAFROG: 'mech' })[type];
+    return makeModel(key ? models[key] : null, size, { tint: type === 'ALIENBOSS' ? '#b06bff' : type === 'MECHAFROG' ? '#3fbf4a' : null }) || makeFallbackActor(type);
   }
 
   // Wing-flap vertex animation for the (static) eagle mesh: vertices far from the body along X move up/down.
@@ -703,7 +710,20 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     return uniforms;
   }
 
+  // Blaster Kit guns: centred, scaled and pointed along +Z.
+  function gunFrom(template, length, flip = WEAPON_FLIP) {
+    const holder = new THREE.Group();
+    const gun = template.clone(true);
+    const b = new THREE.Box3().setFromObject(gun), size = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3());
+    const k = length / Math.max(size.x, size.y, size.z, 0.001);
+    gun.scale.setScalar(k); gun.position.set(-c.x * k, -c.y * k, -c.z * k);
+    const spin = new THREE.Group(); spin.add(gun); if (flip) spin.rotation.y = Math.PI;
+    setupMaterial(spin); spin.traverse(n => { if (n.isMesh) n.castShadow = true; });
+    holder.add(spin); holder.userData.length = length;
+    return holder;
+  }
   function makeWeapon() {
+    if (models.blasterD) return gunFrom(models.blasterD, 0.95);
     const holder = new THREE.Group();
     if (!models.rifle) {
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.7), new THREE.MeshStandardMaterial({ color: '#448bad', metalness: 0.5, roughness: 0.4 }));
@@ -723,6 +743,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     return holder;
   }
   function makeLaserGun() {
+    if (models.blasterE) { const g = gunFrom(models.blasterE, 1.05); const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), emissiveMat('#7ff6ff', 2.5)); crystal.position.set(0, 0.04, 0.58); crystal.scale.z = 1.6; g.add(crystal); for (const z of [-0.1, 0.12]) { const coil = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.022, 8, 20), emissiveMat('#ff3df2', 2.2)); coil.position.z = z; g.add(coil); } g.userData.crystal = crystal; return g; }
     const g = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.62, 12), new THREE.MeshStandardMaterial({ color: '#2a2440', metalness: 0.8, roughness: 0.25 })); body.rotation.x = Math.PI / 2; g.add(body);
     for (const z of [-0.12, 0.06, 0.24]) { const coil = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.03, 8, 20), emissiveMat('#ff3df2', 2.2)); coil.position.z = z; g.add(coil); }
@@ -741,6 +762,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     return g;
   }
   function makeLauncher() {
+    if (models.blasterO) { const g = gunFrom(models.blasterO, 0.9); const tip = makeMissile(0.75); tip.rotation.x = Math.PI / 2; tip.position.set(0, 0.06, 0.5); g.add(tip); return g; }
     const g = new THREE.Group();
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.8, 14, 1, true), new THREE.MeshStandardMaterial({ color: '#4b5a3a', metalness: 0.5, roughness: 0.5, side: THREE.DoubleSide })); tube.rotation.x = Math.PI / 2; g.add(tube);
     for (const z of [-0.36, 0.36]) { const rim = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.03, 8, 18), new THREE.MeshStandardMaterial({ color: '#2b2b2b', metalness: 0.7 })); rim.position.z = z; g.add(rim); }
@@ -814,7 +836,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     r.canvas.texture.needsUpdate = true;
   }
 
-  const ENEMY_SIZE = { BOSS: 2.25, MUSHROOM: 2.6, ALIENBOSS: 2.7, EAGLE: 1.7, SNAKE: 0.66, WOLF: 2.2, FOX: 1.35, MOLE: 0.95, TORNADO: 1.6, ALIEN: 1.65, MAGE: 1.25, GHOST: 1.05, PLANT: 1.25 };
+  const ENEMY_SIZE = { BOSS: 2.25, MUSHROOM: 2.6, ALIENBOSS: 2.7, EAGLE: 1.7, SNAKE: 0.66, WOLF: 2.2, FOX: 1.35, MOLE: 0.95, TORNADO: 1.6, ALIEN: 1.65, MUSHNUB: 0.95, MECHAFROG: 2.2, MAGE: 1.25, GHOST: 1.05, PLANT: 1.25 };
   function makeEnemy(enemy) {
     const size = ENEMY_SIZE[enemy.type] || 0.95;
     const root = new THREE.Group();
@@ -837,6 +859,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       health = makeBillboard(1.25, 0.3); health.sprite.position.y = height + 0.35; health.sprite.material.depthTest = true;
     }
     root.add(health.sprite);
+    if (enemy.type === 'MECHAFROG') { for (const x of [-0.32, 0.32]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), new THREE.MeshStandardMaterial({ color: '#f4ffe0', roughness: 0.3 })); eye.position.set(x, height * 0.97, 0.18); const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), emissiveMat('#ff3b30', 2.2)); pupil.position.set(0, 0.02, 0.17); eye.add(pupil); body.add(eye); } }
+    if (enemy.type === 'TORNADO' && enemy.fire) { const tw = body.userData.tornado; tw.fire = true; [...tw.layers, ...tw.shells].forEach(l => l.traverse(n => { if (n.isMesh) { n.material.color = new THREE.Color('#ffb070'); n.material.emissive = new THREE.Color('#ff4a00'); n.material.emissiveIntensity = 1.1; } })); tw.dustRing.material.color = new THREE.Color('#ff7a2a'); }
     if (enemy.type === 'MAGE') { const orb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), emissiveMat('#b37bff', 3)); orb.position.set(0.42, 0.95, 0.25); body.add(orb); const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), glowMat('#a86bff')); orb.add(halo); root.userData.orb = orb; }
     if (enemy.type === 'MOLE') {
       const hole = new THREE.Group();
@@ -851,6 +875,106 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     return root;
   }
 
+  function makePrismShield(r) {
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      uniforms: { uTime: time, uHit: { value: 0 }, uAlpha: { value: 0.9 } },
+      vertexShader: 'varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); vP=position; gl_Position=projectionMatrix*mv; }',
+      fragmentShader: 'uniform float uTime; uniform float uHit; uniform float uAlpha; varying vec3 vN; varying vec3 vV; varying vec3 vP; vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0); } void main(){ float f=pow(1.0-abs(dot(vN,vV)),2.2); float bands=0.5+0.5*sin(vP.y*9.0+uTime*3.0); vec3 c=hue(fract(f*0.9+vP.y*0.25+uTime*0.12)); float hex=step(0.92,abs(sin(vP.x*14.0))*abs(sin(vP.z*14.0+uTime))); float a=(0.12+f*0.85+hex*0.25+bands*0.08+uHit*0.6)*uAlpha; gl_FragColor=vec4(mix(c,vec3(1.0),uHit*0.6)*1.4,a); }'
+    });
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 3), mat); m.renderOrder = 7; return m;
+  }
+  function makeUfo() {
+    const g = new THREE.Group();
+    const hull = new THREE.Mesh(new THREE.SphereGeometry(1.6, 32, 12), new THREE.MeshStandardMaterial({ color: '#b8c4d0', metalness: 0.85, roughness: 0.25 })); hull.scale.y = 0.24; g.add(hull);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.62, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#8affc1', emissive: '#2bdc84', emissiveIntensity: 0.9, transparent: true, opacity: 0.8 })); dome.position.y = 0.22; g.add(dome);
+    const lights = new THREE.Group(); for (let i = 0; i < 12; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? '#ff4fd8' : '#7dff9b', toneMapped: false })); const a = i / 12 * Math.PI * 2; l.position.set(Math.cos(a) * 1.45, -0.04, Math.sin(a) * 1.45); lights.add(l); } g.add(lights);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.5, 6, 28, 1, true), new THREE.MeshBasicMaterial({ color: '#9dffcb', map: pillarTexture, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })); beam.position.y = -3.1; g.add(beam);
+    g.userData = { lights, beam };
+    return g;
+  }
+  function makeGiantShroom() {
+    const g = new THREE.Group();
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.65, 2.2, 18), new THREE.MeshStandardMaterial({ color: '#f4ead2', roughness: 0.8 })); stalk.position.y = 1.1; g.add(stalk);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(1.7, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#d8402f', roughness: 0.55 })); cap.position.y = 2.1; cap.scale.y = 0.75; g.add(cap);
+    for (let i = 0; i < 14; i++) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.16 + (i % 3) * 0.05, 10, 8), new THREE.MeshStandardMaterial({ color: '#fff8e8' })); const a = i * 2.399, el = 0.25 + (i % 5) * 0.22; dot.position.set(Math.cos(a) * Math.cos(el) * 1.66, 2.1 + Math.sin(el) * 1.25, Math.sin(a) * Math.cos(el) * 1.66); g.add(dot); }
+    g.traverse(n => { if (n.isMesh) n.castShadow = true; });
+    return g;
+  }
+  const easeBack = x => 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2);
+  function elitesSpawnVisual(enemy, node, u, body, position, now, dt) {
+    const total = (enemy.spawnUntil || now) - (enemy.spawnAt || now), age = now - (enemy.spawnAt || now), p = Math.min(1, age / Math.max(1, total));
+    const spawning = now < (enemy.spawnUntil || 0);
+    if (!u.spawnFx) u.spawnFx = { done: false };
+    if (enemy.type === 'BOSS') {
+      if (spawning) { body.scale.setScalar(0.12 + 0.88 * easeBack(p)); if (Math.random() < 0.6) dust.emit({ pos: new THREE.Vector3(position.x, 0.2, position.z), count: 2, colors: ['#4a1a2a', '#8b2a3a', '#2a0a12'], speed: 2, up: 1.5, gravity: -3, radius: 0.6, life: 0.6, size: 0.3 }); }
+      else if (!u.spawnFx.done) { u.spawnFx.done = true; ringFx(position, '#ff4d5e', { to: 4, life: 0.6, width: 0.2 }); shake = Math.max(shake, 0.4); }
+      return;
+    }
+    if (enemy.type === 'ALIENBOSS') {
+      if (!u.ufo) { u.ufo = makeUfo(); scene.add(u.ufo); }
+      const ufo = u.ufo, beam = ufo.userData.beam;
+      ufo.userData.lights.rotation.y += dt * 4;
+      if (spawning) {
+        ufo.position.set(position.x + Math.sin(now / 300) * 0.15, 9 - Math.min(1, p / 0.35) * 3.2, position.z);
+        beam.material.opacity = p > 0.3 ? 0.55 + Math.sin(now / 60) * 0.12 : 0;
+        const k = Math.max(0, (p - 0.4) / 0.6);
+        body.visible = k > 0; body.position.y = (1 - k) * 3.2; body.scale.set(0.3 + k * 0.7, 0.3 + k * 0.7, 0.3 + k * 0.7);
+        if (p > 0.3 && Math.random() < 0.7) sparks.emit({ pos: new THREE.Vector3(position.x, 0.2 + Math.random() * 4.5, position.z), count: 1, colors: ['#9dffcb', '#ff4fd8'], speed: 0.3, up: 0.6, gravity: 0, radius: 0.9, life: 0.6, size: 0.2 });
+      } else {
+        body.visible = true;
+        if (!u.spawnFx.done) { u.spawnFx.done = true; u.spawnFx.leaveAt = now; ringFx(position, '#7dff9b', { to: 3.5, life: 0.6 }); }
+        const l = (now - u.spawnFx.leaveAt) / 1000;
+        beam.material.opacity = Math.max(0, 0.5 - l * 1.5);
+        ufo.position.y += dt * (4 + l * 14); ufo.position.x += dt * 6;
+        if (l > 1.4) { scene.remove(ufo); u.ufo = null; u.spawnFx = null; }
+      }
+      return;
+    }
+    if (enemy.type === 'MUSHROOM') {
+      if (!u.shroom) { u.shroom = makeGiantShroom(); node.add(u.shroom); }
+      if (spawning) {
+        body.visible = false;
+        const g = Math.min(1, p / 0.7), wob = p > 0.7 ? 1 + Math.sin(now / 35) * 0.06 * (p - 0.7) / 0.3 : 1;
+        u.shroom.scale.set(easeBack(g) * wob, easeBack(g) / wob, easeBack(g) * wob);
+        if (Math.random() < 0.3) dust.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 2, colors: ['#6b4a2b', '#8a5a2b'], speed: 1.5, up: 1.4, gravity: -5, radius: 0.8, life: 0.5, size: 0.2 });
+      } else if (!u.spawnFx.done) {
+        u.spawnFx.done = true; node.remove(u.shroom); u.shroom = null; body.visible = true;
+        dust.emit({ pos: new THREE.Vector3(position.x, 2, position.z), count: 140, colors: ['#d78bff', '#c5ff7a', '#ffd27a', '#ffffff'], speed: 5, up: 3, gravity: -1.2, drag: 1.4, life: 1.8, size: 0.32 });
+        sparks.emit({ pos: new THREE.Vector3(position.x, 1.5, position.z), count: 60, colors: ['#c5ff7a', '#d78bff'], speed: 4, up: 4, life: 1, size: 0.25 });
+        ringFx(position, '#ffa53a', { to: 5, life: 0.8, width: 0.25 }); shake = Math.max(shake, 0.5);
+      }
+      if (u.spawnFx?.done) { const k = Math.min(1, (now - enemy.spawnUntil) / 350); body.scale.multiplyScalar(0.4 + 0.6 * easeBack(k)); if (k >= 1) u.spawnFx = null; }
+    }
+  }
+  const CHAT_STYLE = {
+    BOSS: { bg: '#2a0710f2', border: '#ff4d5e', text: '#ffe3e3', shape: 'jagged' },
+    MUSHROOM: { bg: '#fff4dcf5', border: '#e0782a', text: '#6b3a12', shape: 'cloud' },
+    ALIENBOSS: { bg: '#0b1626f2', border: '#7dff9b', text: '#9dffcb', shape: 'scifi' },
+    MAGE: { bg: '#20103af2', border: '#b37bff', text: '#f0e2ff', shape: 'round' }
+  };
+  function drawChat(chat, text, type, side = false) {
+    const st = CHAT_STYLE[type] || CHAT_STYLE.MAGE, g = chat.context;
+    g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 512, 155);
+    const x = 14, y = 8, w = 484, h = 112;
+    g.fillStyle = st.bg; g.strokeStyle = st.border; g.lineWidth = 6;
+    g.beginPath();
+    if (st.shape === 'jagged') { const n = 18; for (let i = 0; i <= n; i++) g.lineTo(x + w * i / n, y + (i % 2 ? 6 : 0)); for (let i = 0; i <= 6; i++) g.lineTo(x + w + (i % 2 ? 8 : 0), y + h * i / 6); for (let i = n; i >= 0; i--) g.lineTo(x + w * i / n, y + h - (i % 2 ? 6 : 0)); for (let i = 6; i >= 0; i--) g.lineTo(x - (i % 2 ? 8 : 0), y + h * i / 6); }
+    else if (st.shape === 'cloud') { rounded(g, x, y, w, h, 46); }
+    else if (st.shape === 'scifi') { const c = 18; g.moveTo(x + c, y); g.lineTo(x + w - c, y); g.lineTo(x + w, y + c); g.lineTo(x + w, y + h - c); g.lineTo(x + w - c, y + h); g.lineTo(x + c, y + h); g.lineTo(x, y + h - c); g.lineTo(x, y + c); }
+    else rounded(g, x, y, w, h, 30);
+    g.closePath(); g.fill(); g.stroke();
+    // Tail
+    if (side) { const my = y + h / 2; g.beginPath(); g.moveTo(x + 2, my - 20); g.lineTo(0, my + 18); g.lineTo(x + 2, my + 14); g.closePath(); g.fill(); g.stroke(); g.fillStyle = st.bg; g.fillRect(x - 1, my - 18, 8, 30); } else { g.beginPath(); g.moveTo(236, y + h - 2); g.lineTo(256, 150); g.lineTo(278, y + h - 2); g.closePath(); g.fill(); g.stroke(); g.fillStyle = st.bg; g.fillRect(238, y + h - 8, 38, 9); }
+    if (st.shape === 'scifi') { g.fillStyle = 'rgba(125,255,155,.08)'; for (let yy = y + 6; yy < y + h; yy += 6) g.fillRect(x + 4, yy, w - 8, 2); }
+    if (st.shape === 'cloud') { g.fillStyle = 'rgba(224,120,42,.25)'; for (const [cx, cy, r] of [[40, 30, 9], [470, 34, 7], [455, 100, 10], [52, 98, 6]]) { g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill(); } }
+    g.fillStyle = st.text; g.textAlign = 'center'; g.textBaseline = 'middle';
+    let size = 34; g.font = `900 ${size}px Bungee, "Arial Black", sans-serif`;
+    const words = String(text).split(' '); let lines = [text];
+    while (size > 18) { g.font = `900 ${size}px Bungee, "Arial Black", sans-serif`; lines = []; let cur = ''; for (const wd of words) { const tst = cur ? cur + ' ' + wd : wd; if (g.measureText(tst).width > w - 40 && cur) { lines.push(cur); cur = wd; } else cur = tst; } lines.push(cur); if (lines.length <= 2) break; size -= 2; }
+    lines.slice(0, 2).forEach((ln, i, arr) => g.fillText(ln, 256, y + h / 2 + (i - (arr.length - 1) / 2) * (size + 4)));
+    chat.texture.needsUpdate = true;
+  }
   function drawHealth(node, enemy) {
     const ratio = Math.max(0, enemy.hp / Math.max(1, enemy.maxHp));
     if (enemy.elite) { const style = ELITE_STYLE[enemy.type] || ELITE_STYLE.BOSS; drawPlate(node, { text: enemy.name || enemy.type, health: ratio * 100, color: style.color, elite: style }); return; }
@@ -871,7 +995,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     const { context: g, texture } = farmBar;
     g.clearRect(0, 0, 512, 128);
     g.fillStyle = '#10251fee'; g.strokeStyle = henFlash ? '#ff3546' : '#ffe17a'; g.lineWidth = 6; rounded(g, 5, 8, 502, 110, 20); g.fill(); g.stroke();
-    g.fillStyle = '#fff7dc'; g.font = '850 29px Rye, Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText(`MAMA HEN · ${Math.ceil(hp)}%`, 256, 46);
+    g.fillStyle = '#fff7dc'; g.font = '900 28px Bungee, "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText(`MAMA HEN · ${Math.ceil(hp)}%`, 256, 46);
     g.fillStyle = '#263d30'; rounded(g, 28, 65, 456, 34, 10); g.fill();
     g.fillStyle = flashKey === 0 ? '#ff3546' : hp > 50 ? '#53d57a' : hp > 25 ? '#f2c64c' : '#ff6464'; rounded(g, 31, 68, 450 * Math.max(0, hp) / 100, 28, 8); g.fill();
     texture.needsUpdate = true;
@@ -940,7 +1064,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       u.aura.material.color.set(hit ? '#ff273b' : player.color);
       u.ring.material.color.set(hit ? '#ff273b' : player.color);
       u.pointer.visible = !lobby && !dead;
-      drawPlate(u.label, { text: lobby ? player.name : hulk ? `💪 ${player.name} · HULK` : `${player.name} · ${player.score}`, health: player.hp, color: hulk ? '#4cff4c' : player.color });
+      drawPlate(u.label, { text: lobby ? player.name : hulk ? `💪 ${player.name} · HULK` : `${player.name} · ${player.score}`, health: hulk ? (player.hulkHp ?? 100) : player.hp, color: hulk ? '#4cff4c' : player.color });
       const ls = lobby ? 0.62 : 1; u.label.sprite.scale.set(3.05 * ls, 0.78 * ls, 1); u.label.sprite.position.y = lobby ? 1.75 : 1.85;
       u.angel.visible = dead && !lobby;
       u.shield.visible = !dead && now < (player.effects?.SHIELD || 0);
@@ -992,10 +1116,13 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       body.rotation.y += Math.atan2(Math.sin(yaw - body.rotation.y), Math.cos(yaw - body.rotation.y)) * Math.min(1, dt * 10);
       body.position.set(0, 0, 0); body.scale.setScalar(1); body.rotation.x = 0; body.rotation.z = 0;
       const t = now / 1000 + (enemy.phase || 0);
+      const spawning = now < (enemy.spawnUntil || 0);
       // Skeletal animation state.
       if (body.userData.actions) {
         if (enemy.attackAt && now - enemy.attackAt < 500 && body.userData.actions.attack) playAction(body, 'attack', 0.1);
-        else if (!enemy.attackAt || now - enemy.attackAt >= 500) playAction(body, enemy.moving === false ? 'idle' : (enemy.type === 'WOLF' && now < (enemy.dashUntil || 0) ? 'run' : 'walk'));
+        else if (enemy.leapUntil && now < enemy.leapUntil && body.userData.actions.jump) playAction(body, 'jump', 0.08);
+        else if (enemy.type === 'MECHAFROG' && enemy.attackAt && now - enemy.attackAt < 600 && body.userData.actions.shoot) playAction(body, 'shoot', 0.08);
+        else if (!enemy.attackAt || now - enemy.attackAt >= 500) playAction(body, spawning || enemy.moving === false ? 'idle' : (enemy.type === 'WOLF' && now < (enemy.dashUntil || 0) ? 'run' : 'walk'));
       }
       switch (enemy.type) {
         case 'FOX': { const jump = now < enemy.jumpUntil ? Math.sin((enemy.jumpUntil - now) / 360 * Math.PI) * 0.75 : 0; body.position.y = jump + Math.abs(Math.sin(t * 11)) * 0.08; body.rotation.x = Math.sin(t * 11) * 0.08 - jump * 0.3; break; }
@@ -1038,7 +1165,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
           tw.debris.children.forEach(d => { const a = d.userData.a + t * d.userData.s; d.position.set(Math.cos(a) * d.userData.r * (0.6 + d.userData.h * 0.35), d.userData.h, Math.sin(a) * d.userData.r * (0.6 + d.userData.h * 0.35)); d.rotation.set(t * 5, t * 7, 0); });
           tw.dustRing.rotation.z += dt * 4; tw.dustRing.scale.setScalar(1 + Math.sin(t * 8) * 0.1);
           if (enemy.launchAt > now) body.position.y = 0.3 + s * 0.3;
-          if (Math.random() < 0.6) dust.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 2, colors: ['#cdb48a', '#a8916b', '#e0d2b4'], speed: 2.2 * s, up: 0.8, gravity: -0.5, radius: 0.5, life: 0.7, size: 0.35 });
+          if (tw.fire && Math.random() < 0.9) sparks.emit({ pos: new THREE.Vector3(position.x, 0.2 + Math.random() * 2.2 * s, position.z), count: 2, colors: ['#ffb340', '#ff5a1f', '#ffe08a'], speed: 0.9, up: 1.6, gravity: 1.2, radius: 0.6 * s, life: 0.6, size: 0.34 });
+          if (Math.random() < 0.6) dust.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 2, colors: tw.fire ? ['#3a2a22', '#5a3a2a', '#ff7a2a'] : ['#cdb48a', '#a8916b', '#e0d2b4'], speed: 2.2 * s, up: 0.8, gravity: -0.5, radius: 0.5, life: 0.7, size: 0.35 });
           break;
         }
         case 'MOLE': {
@@ -1065,6 +1193,25 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         }
         default: break;
       }
+      // Elite entrances.
+      if (spawning || u.spawnFx) elitesSpawnVisual(enemy, node, u, body, position, now, dt);
+      // Chupacabras / Mecha Frog leap arc.
+      if (enemy.leapUntil && now < enemy.leapUntil) { const k = 1 - (enemy.leapUntil - now) / enemy.leapDur; body.position.y = Math.sin(k * Math.PI) * (enemy.leapKind === 'chupa' ? 3.4 : 2.4); body.rotation.x = -0.4 + k * 0.8; }
+      if (enemy.type === 'MUSHNUB') { const age = now - (enemy.bornAt || 0); if (age < 350) body.scale.setScalar(Math.max(0.05, age / 350)); body.position.y += Math.abs(Math.sin(t * 16)) * 0.08; if (Math.random() < 0.2) dust.emit({ pos: new THREE.Vector3(position.x, 0.5, position.z), count: 1, colors: ['#d78bff', '#c5ff7a'], speed: 0.2, up: 0.4, gravity: 0, life: 0.6, size: 0.12 }); }
+      // Prismatic space shield (Alien Overlord and its illusions).
+      if (enemy.type === 'ALIENBOSS') {
+        const on = now < (enemy.shieldUntil || 0);
+        if (on && !u.shield) { u.shield = makePrismShield(enemy.illusion ? 1.7 : 2.0); node.add(u.shield); }
+        if (u.shield) { u.shield.visible = on; if (on) { const hit = now - (enemy.shieldHitAt || 0) < 160; u.shield.material.uniforms.uHit.value = hit ? 1 : Math.max(0, u.shield.material.uniforms.uHit.value - dt * 4); u.shield.position.y = (u.height || 2) * 0.55 + body.position.y; u.shield.rotation.y += dt * 0.8; const left = (enemy.shieldUntil - now) / 1000; u.shield.material.uniforms.uAlpha.value = left < 2 && Math.floor(now / 120) % 2 ? 0.25 : 0.9; } }
+      }
+      // Speech bubbles (elites + angry gnomes).
+      if (enemy.say && now - enemy.say.at < 3200) {
+        const side = !!enemy.elite;
+        if (!u.chat) { u.chat = makeBillboard(3.8, 1.15, 1024, 310); u.chat.sprite.center.set(side ? 0 : 0.5, side ? 0.5 : 0); node.add(u.chat.sprite); }
+        if (u.chat.lastAt !== enemy.say.at) { u.chat.lastAt = enemy.say.at; drawChat(u.chat, enemy.say.text, enemy.type, side); }
+        const pop = Math.min(1, (now - enemy.say.at) / 160);
+        u.chat.sprite.visible = !spawning; if (side) { u.chat.sprite.position.set(1.3 + (enemy.type === 'MUSHROOM' ? 0.5 : 0), u.height * 0.72 + body.position.y, 0); } else u.chat.sprite.position.y = u.height + 0.8 + body.position.y; u.chat.sprite.scale.set(3.8 * (0.5 + pop * 0.5), 1.15 * (0.5 + pop * 0.5), 1);
+      } else if (u.chat) u.chat.sprite.visible = false;
       // Teleport (mage + alien overlord): stretch in from a thin beam of light.
       if (enemy.teleportAt && now - enemy.teleportAt < 450) { const p = (now - enemy.teleportAt) / 450; body.scale.set(0.2 + p * 0.8, 1.8 - p * 0.8, 0.2 + p * 0.8); }
       if (enemy.elite && u.eliteAura) { u.spikes.rotation.y -= dt * 0.8; u.eliteAura.rotation.z += dt * 1.5; const pulse = 1 + Math.sin(now / 180) * 0.08; u.eliteAura.scale.setScalar(pulse * (enemy.type === 'BOSS' ? 1.1 : 1.2)); }
@@ -1074,14 +1221,16 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       if (u.materialColors === undefined) { u.materialColors = []; body.traverse(part => { if (part.isMesh) for (const mat of (Array.isArray(part.material) ? part.material : [part.material])) if (mat?.color) u.materialColors.push({ mat, color: mat.color.clone() }); }); }
       for (const entry of u.materialColors) entry.mat.color.copy(hitFlash ? FLASH : entry.color);
       if (enemy.hitUntil && enemy.hitUntil !== u.lastHit) { u.lastHit = enemy.hitUntil; sparks.emit({ pos: new THREE.Vector3(position.x, 0.6, position.z), count: 5, colors: ['#fff3a0', '#ffb347'], speed: 3, up: 2, life: 0.25, size: 0.14 }); }
-      u.health.sprite.visible = enemy.elite || enemy.hp < enemy.maxHp;
+      u.health.sprite.visible = (enemy.elite || enemy.hp < enemy.maxHp) && !spawning;
       if ((enemy.type === 'MOLE' || enemy.type === 'PLANT') && now < (enemy.emergeAt || 0)) u.health.sprite.visible = false;
+      if (enemy.leapUntil && now < enemy.leapUntil) u.health.sprite.position.y += body.position.y;
       drawHealth(u.health, enemy);
       u.health.sprite.position.y = u.height + (enemy.elite ? 0.75 : 0.35) + (enemy.type === 'EAGLE' ? 1.6 : enemy.type === 'ALIENBOSS' ? 0.6 : 0);
     }
     for (const [enemy, node] of enemyNodes) if (!seen.has(enemy)) {
       const p = node.position;
-      if (enemy.hp <= 0) { dust.emit({ pos: new THREE.Vector3(p.x, 0.4, p.z), count: enemy.elite ? 40 : 12, colors: enemy.type === 'TORNADO' ? ['#e0d2b4', '#cdb48a'] : ['#a91f25', '#df3832', '#6b1015'], speed: enemy.elite ? 4 : 2.5, up: 3, gravity: -9, life: 0.7, size: 0.18 }); if (enemy.elite) sparks.emit({ pos: new THREE.Vector3(p.x, 1, p.z), count: 50, colors: [ELITE_STYLE[enemy.type]?.color || '#ff4d5e', '#fff3a0'], speed: 6, up: 4, gravity: -5, life: 1, size: 0.3 }); }
+      if (enemy.hp <= 0 && !enemy.illusion && enemy.type !== 'MUSHNUB') { dust.emit({ pos: new THREE.Vector3(p.x, 0.4, p.z), count: enemy.elite ? 40 : 12, colors: enemy.type === 'TORNADO' ? ['#e0d2b4', '#cdb48a'] : ['#a91f25', '#df3832', '#6b1015'], speed: enemy.elite ? 4 : 2.5, up: 3, gravity: -9, life: 0.7, size: 0.18 }); if (enemy.elite) sparks.emit({ pos: new THREE.Vector3(p.x, 1, p.z), count: 50, colors: [ELITE_STYLE[enemy.type]?.color || '#ff4d5e', '#fff3a0'], speed: 6, up: 4, gravity: -5, life: 1, size: 0.3 }); }
+      if (node.userData.ufo) scene.remove(node.userData.ufo);
       scene.remove(node); enemyNodes.delete(enemy);
     }
   }
@@ -1175,7 +1324,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       if (!node) {
         if (kind === 'shot') node = item.missile ? makeMissile(1.3) : new THREE.Mesh(shotGeo, shotMat(item.color || '#fff1a2'));
         else if (kind === 'fireball') {
-          const color = item.kind === 'seed' ? '#b8ed53' : item.kind === 'spore' ? '#d78bff' : '#ff6a2d';
+          const color = item.kind === 'seed' ? '#b8ed53' : item.kind === 'spore' ? '#d78bff' : item.kind === 'rocket' ? '#ffb340' : '#ff6a2d';
           node = new THREE.Group();
           const core = new THREE.Mesh(new THREE.SphereGeometry(item.kind === 'seed' ? 0.15 : 0.22, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2.2), toneMapped: false })); node.add(core);
           const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), glowMat(color)); node.add(halo); node.userData = { halo, color };
@@ -1205,6 +1354,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       } else {
         node.position.copy(actorPosition(item.x, item.y, 0.5 + Math.sin(now / 120) * 0.05));
         node.userData.halo?.lookAt(camera.position);
+        if (item.kind === 'rocket') { if (!node.userData.missile) { node.userData.missile = makeMissile(1.2); node.add(node.userData.missile); node.children[0].visible = false; } node.userData.missile.quaternion.setFromUnitVectors(UPV, new THREE.Vector3(item.dx, 0, item.dy).normalize()); node.position.y = 0.8; dust.emit({ pos: node.position.clone(), count: 1, colors: ['#cfcfcf', '#9a9a9a'], speed: 0.2, up: 0.3, gravity: 0.2, drag: 0.8, life: 0.8, size: 0.25 }); }
         if (Math.random() < 0.5) (item.kind === 'fire' ? sparks : dust).emit({ pos: node.position.clone(), count: 1, color: node.userData.color, speed: 0.3, up: 0.3, gravity: 0, life: 0.4, size: item.kind === 'fire' ? 0.3 : 0.16 });
       }
     }
@@ -1243,6 +1393,20 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     mesh.position.copy(pos).setY(height / 2); scene.add(mesh);
     activeFx.push({ life, age: 0, update(p) { mesh.scale.set(1 - p * 0.85, 1, 1 - p * 0.85); mesh.material.opacity = 1 - p * p; }, dispose() { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); } });
   }
+  const stripeTex = canvasTexture(16, 128, (g, w, h) => { g.clearRect(0, 0, w, h); for (let y = 0; y < h; y += 8) { g.fillStyle = y % 16 ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,0)'; g.fillRect(0, y, w, 4); } }, true);
+  stripeTex.colorSpace = THREE.NoColorSpace;
+  function stripeColumn(pos, life, grow) {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 4, 24, 1, true), new THREE.MeshBasicMaterial({ color: '#9dffcb', map: stripeTex.clone(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    mesh.material.map.needsUpdate = true; mesh.material.map.repeat.set(1, 3); mesh.position.copy(pos).setY(2); scene.add(mesh);
+    activeFx.push({ life, age: 0, update(p) { const k = grow ? 1 - p : p; mesh.scale.set(1 - k * 0.95, 1 + (grow ? (1 - p) : p) * 0.3, 1 - k * 0.95); mesh.material.map.offset.y -= 0.08; mesh.material.opacity = 1 - p * 0.6; mesh.material.color.setHSL((p * 2) % 1 * 0.3 + 0.35, 1, 0.7); }, dispose() { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); } });
+  }
+  const craterTex = canvasTexture(256, 256, (g, w) => { const grd = g.createRadialGradient(w / 2, w / 2, 10, w / 2, w / 2, w / 2); grd.addColorStop(0, 'rgba(40,26,14,.9)'); grd.addColorStop(0.55, 'rgba(70,48,28,.75)'); grd.addColorStop(0.78, 'rgba(150,110,70,.55)'); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, w, w); g.strokeStyle = 'rgba(30,18,8,.6)'; g.lineWidth = 3; for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; g.beginPath(); g.moveTo(w / 2 + Math.cos(a) * 40, w / 2 + Math.sin(a) * 40); g.lineTo(w / 2 + Math.cos(a + 0.2) * 110, w / 2 + Math.sin(a + 0.2) * 110); g.stroke(); } });
+  function craterDecal(pos, r) {
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshBasicMaterial({ map: craterTex, transparent: true, depthWrite: false }));
+    mesh.rotation.x = -Math.PI / 2; mesh.position.copy(pos).setY(0.045); mesh.renderOrder = 1; scene.add(mesh);
+    const rocks = []; for (let i = 0; i < 7; i++) { const rk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12 + Math.random() * 0.1), new THREE.MeshStandardMaterial({ color: '#6b5a43' })); const a = i / 7 * Math.PI * 2 + Math.random(); rk.position.set(pos.x + Math.cos(a) * r * 0.85, 0.08, pos.z + Math.sin(a) * r * 0.85); scene.add(rk); rocks.push(rk); }
+    activeFx.push({ life: 8, age: 0, update(p) { const a = p > 0.7 ? 1 - (p - 0.7) / 0.3 : 1; mesh.material.opacity = a; rocks.forEach(rk => { rk.scale.setScalar(Math.max(0.01, a)); }); }, dispose() { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); rocks.forEach(rk => { scene.remove(rk); rk.geometry.dispose(); }); } });
+  }
   function handleFx(list, now, players) {
     for (const f of list) {
       if (seenFx.has(f.id)) continue;
@@ -1275,7 +1439,9 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
           const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), glowMat('#ffcf6b')); glow.position.y = -1.3; holder.add(glow);
           scene.add(holder);
           const prev = new THREE.Vector3();
-          ringFx(from, '#ffffff', { to: 3, life: 0.5 }); dust.emit({ pos: from.clone().setY(0.3), count: 40, colors: ['#e8dcc0', '#c9b48a', '#ffffff'], speed: 4, up: 2, gravity: -2, life: 1, size: 0.4 });
+          ringFx(from, '#ffffff', { to: 3, life: 0.5 }); ringFx(from, '#ff7b2a', { to: 4.5, life: 0.7, width: 0.3 }); pillarFx(from, '#ff8a2a', { height: 9, life: 0.9, radius: 1.1 }); dust.emit({ pos: from.clone().setY(0.3), count: 70, colors: ['#e8dcc0', '#c9b48a', '#ffffff', '#6b6b6b'], speed: 5, up: 2, gravity: -2, life: 1.4, size: 0.5 });
+          sparks.emit({ pos: from.clone().setY(0.5), count: 120, colors: ['#ffe08a', '#ffb340', '#ff5a1f', '#ffffff'], speed: 3.5, up: 6, gravity: -3, life: 0.9, size: 0.45 }); shake = Math.max(shake, 0.6);
+          { let n = 0; activeFx.push({ life: 0.9, age: 0, update(p) { if (n++ % 1 === 0) sparks.emit({ pos: from.clone().setY(0.3), count: 6, colors: ['#ffb340', '#ff5a1f', '#ffe08a'], speed: 1.5, up: 7, gravity: 1, radius: 0.5, life: 0.5, size: 0.5 }); dust.emit({ pos: from.clone().setY(0.2), count: 3, colors: ['#7a7a7a', '#b5b5b5'], speed: 2.5, up: 1, gravity: 0, drag: 1, life: 1.4, size: 0.6 }); }, dispose() {} }); }
           activeFx.push({ life, age: 0, update(p) {
             prev.copy(holder.position);
             holder.position.lerpVectors(from, to, p).setY(1.2 + Math.sin(p * Math.PI) * 13);
@@ -1299,6 +1465,23 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         case 'hulk': { pillarFx(pos, '#4cff4c', { height: 7, life: 0.9, radius: 0.9 }); ringFx(pos, '#4cff4c', { to: 4, life: 0.7, width: 0.25 }); sparks.emit({ pos: pos.clone().setY(0.8), count: 60, colors: ['#4cff4c', '#2f7d1f', '#ffffff'], speed: 5, up: 4, gravity: -4, life: 0.9, size: 0.28 }); shake = Math.max(shake, 0.6); break; }
         case 'hulkDash': { ringFx(pos, '#5dff3d', { from: 0.3, to: 1.6, life: 0.3, y: 0.15, width: 0.3 }); dust.emit({ pos: pos.clone().setY(0.2), count: 14, colors: ['#8b7355', '#a8916b', '#5dff3d'], speed: 2.5, up: 1.2, gravity: -5, life: 0.5, size: 0.26 }); break; }
         case 'hulkEnd': { ringFx(pos, '#9cff9c', { to: 2, life: 0.5 }); dust.emit({ pos: pos.clone().setY(0.8), count: 20, colors: ['#4cff4c', '#ffffff'], speed: 2, up: 2, gravity: -2, life: 0.8, size: 0.2 }); break; }
+        case 'ufoBlink': {
+          // 1960s sci-fi blink: stacked neon rings collapse at the origin and ring out at the destination with a "zap" column.
+          const to = actorPosition(f.to.x, f.to.y);
+          for (let i = 0; i < 4; i++) { ringFx(pos.clone(), i % 2 ? '#ff4fd8' : '#7dff9b', { from: 2.6 - i * 0.4, to: 0.05, life: 0.35 + i * 0.06, y: 0.15 + i * 0.7, width: 0.18 }); ringFx(to.clone(), i % 2 ? '#7dff9b' : '#ff4fd8', { from: 0.05, to: 2.6 - i * 0.3, life: 0.4 + i * 0.07, y: 0.15 + i * 0.7, width: 0.18 }); }
+          stripeColumn(pos, 0.45, false); stripeColumn(to, 0.6, true);
+          sparks.emit({ pos: to.clone().setY(1.2), count: 40, colors: ['#7dff9b', '#ff4fd8', '#ffffff'], speed: 3.5, up: 2.5, gravity: -2, life: 0.6, size: 0.22 });
+          break;
+        }
+        case 'shieldUp': { ringFx(pos, '#9dffcb', { to: 3.2, life: 0.6, width: 0.25 }); ringFx(pos, '#ff9cf0', { to: 2.4, life: 0.5, y: 1.2 }); sparks.emit({ pos: pos.clone().setY(1.5), count: 50, colors: ['#ff4f4f', '#ffd24f', '#4fff7a', '#4fc3ff', '#c44fff'], speed: 3, up: 2, gravity: 0, life: 0.8, size: 0.22 }); break; }
+        case 'illusionPop': { sparks.emit({ pos: pos.clone().setY(1.2), count: 40, colors: ['#c46bff', '#ffffff', '#7dff9b'], speed: 3, up: 2, gravity: 0, life: 0.6, size: 0.25 }); ringFx(pos, '#c46bff', { to: 2.4, life: 0.4 }); dust.emit({ pos: pos.clone().setY(1), count: 20, colors: ['#b48cff', '#e3d4ff'], speed: 1.5, up: 1, gravity: 0.4, drag: 2, life: 1, size: 0.45 }); break; }
+        case 'crater': { craterDecal(pos, f.big ? 1.9 : 1.4); ringFx(pos, '#c9a46a', { to: f.big ? 4 : 3, life: 0.5, width: 0.3 }); dust.emit({ pos: pos.clone().setY(0.3), count: f.big ? 60 : 40, colors: ['#8b7355', '#6b5a43', '#a8916b'], speed: 5, up: 3, gravity: -8, life: 0.8, size: 0.32 }); shake = Math.max(shake, f.big ? 0.55 : 0.35); break; }
+        case 'sporeRain': {
+          for (const sp of f.spots || []) { const at = actorPosition(sp.x, sp.y), warn = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 28), new THREE.MeshBasicMaterial({ color: '#d78bff', transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })); warn.rotation.x = -Math.PI / 2; warn.position.copy(at).setY(0.06); scene.add(warn); activeFx.push({ life: 1.3, age: 0, update(p) { warn.material.opacity = 0.35 + Math.abs(Math.sin(p * 18)) * 0.5; warn.scale.setScalar(1.4 - p * 0.5); if (Math.random() < 0.8) dust.emit({ pos: at.clone().setY(5 + Math.random() * 2), count: 2, colors: ['#d78bff', '#c5ff7a', '#ffd27a'], speed: 0.3, up: -3, gravity: -4, radius: 0.6, life: 1.3, size: 0.2 }); }, dispose() { scene.remove(warn); warn.geometry.dispose(); dust.emit({ pos: at.clone().setY(0.3), count: 16, colors: ['#d78bff', '#c5ff7a'], speed: 2, up: 2, gravity: -3, life: 0.6, size: 0.25 }); } }); }
+          dust.emit({ pos: pos.clone().setY(2.5), count: 50, colors: ['#d78bff', '#c5ff7a', '#ffd27a'], speed: 3, up: 5, gravity: -1, life: 1.4, size: 0.3 });
+          break;
+        }
+        case 'mushBoom': { ringFx(pos, '#c5ff7a', { to: 2.6, life: 0.4, width: 0.3 }); sparks.emit({ pos: pos.clone().setY(0.6), count: 30, colors: ['#c5ff7a', '#d78bff', '#ffd27a'], speed: 4, up: 3, life: 0.5, size: 0.25 }); dust.emit({ pos: pos.clone().setY(0.6), count: 24, colors: ['#d78bff', '#a76bd6', '#c5ff7a'], speed: 2.5, up: 1.5, gravity: 0.2, drag: 2, life: 1.2, size: 0.42 }); break; }
         case 'join': { const node = playerNodes.get(f.playerId); const p = node ? node.position.clone() : pos; dust.emit({ pos: p.clone().setY(1.6), count: 60, colors: ['#ff5e5e', '#ffd45d', '#5ec8ff', '#7be37b', '#c08bff', '#ffffff'], speed: 3, up: 4, gravity: -4, drag: 1.2, life: 1.8, size: 0.16 }); ringFx(p, players.get(f.playerId)?.color || '#ffd45d', { to: 2, life: 0.7, y: 0.35 }); break; }
         default: break;
       }
@@ -1313,7 +1496,9 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   function updateHen(state, now, dt) {
     if (!mama) return;
     const model = mama.userData.model;
-    const since = now - (state.henLastHit || 0), alarmed = state.henLastHit > 0 && since < 1500;
+    const superCluck = state.superChicken?.cluckAt && now - state.superChicken.cluckAt < 1800;
+    const since = superCluck ? now - state.superChicken.cluckAt : now - (state.henLastHit || 0), alarmed = superCluck || (state.henLastHit > 0 && since < 1500);
+    if (superCluck !== henBubbleSuper) { henBubbleSuper = superCluck; drawBubble(superCluck ? ['BAWK BAWK!!', 'SUPER CHICKEN!'] : null); }
     if (state.henLastHit !== lastHenHit) {
       lastHenHit = state.henLastHit;
       if (state.henLastHit) dust.emit({ pos: mama.position.clone().setY(1.4), count: 9, colors: ['#ffffff', '#fff3d2', '#f6e7c8'], speed: 2.2, up: 2.4, gravity: -1, drag: 2.2, life: 1.5, size: 0.2 });
@@ -1373,6 +1558,22 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     countdownSprite.sprite.visible = false;
   }
 
+  const DAY = { sky: new THREE.Color('#fff4dc'), ground: new THREE.Color('#4f7a45'), hemi: 1.3, sun: new THREE.Color('#fff0cd'), sunI: 2.5, fog: FOG.clone(), exp: 1.08 };
+  const NIGHT = { sky: new THREE.Color('#8290ff'), ground: new THREE.Color('#283a5c'), hemi: 0.95, sun: new THREE.Color('#a9bcff'), sunI: 1.15, fog: new THREE.Color('#101a3c'), exp: 1.12 };
+  function updateNight(night, now, dt) {
+    const prev = nightBlend;
+    nightBlend += ((night ? 1 : 0) - nightBlend) * Math.min(1, dt * 2.6);
+    if (Math.abs(prev - nightBlend) < 1e-4 && (nightBlend < 0.001 || nightBlend > 0.999)) { if (nightBlend > 0.5) fireflies(now); return; }
+    const k = nightBlend;
+    hemi.color.copy(DAY.sky).lerp(NIGHT.sky, k); hemi.groundColor.copy(DAY.ground).lerp(NIGHT.ground, k); hemi.intensity = DAY.hemi + (NIGHT.hemi - DAY.hemi) * k;
+    sun.color.copy(DAY.sun).lerp(NIGHT.sun, k); sun.intensity = DAY.sunI + (NIGHT.sunI - DAY.sunI) * k;
+    scene.fog.color.copy(DAY.fog).lerp(NIGHT.fog, k); scene.background.copy(scene.fog.color);
+    if (battleFogMesh) battleFogMesh.material.uniforms.fogColor.value.copy(scene.fog.color);
+    renderer.toneMappingExposure = DAY.exp + (NIGHT.exp - DAY.exp) * k;
+    if (lantern) lantern.intensity = 3.2 * k;
+    if (k > 0.5) fireflies(now);
+  }
+  function fireflies(now) { if (Math.random() < 0.5) sparks.emit({ pos: new THREE.Vector3(target.x + (Math.random() - 0.5) * 30, 0.4 + Math.random() * 1.8, target.z + (Math.random() - 0.5) * 20), count: 1, colors: ['#d8ff6b', '#fff59a'], speed: 0.25, up: 0.2, gravity: 0, drag: 0.2, life: 2.2, size: 0.16 }); }
   function updateCamera(players, dt, lobby) {
     if (snapCam > 0) { snapCam--; dt = 1; }
     lobbyBlend += ((lobby ? 1 : 0) - lobbyBlend) * Math.min(1, dt * 2.2);
@@ -1417,9 +1618,12 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   const readyPromise = loadModels();
   let slowFrames = 0, postFx = new URLSearchParams(location.search).get('fx') === '1';
 
+  const ray = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.3), ndc = new THREE.Vector2(), hitPoint = new THREE.Vector3();
+  function screenToWorld(clientX, clientY) { const r = canvas.getBoundingClientRect(); ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); if (!ray.ray.intersectPlane(groundPlane, hitPoint)) return null; return { x: hitPoint.x * UNIT + world.home.x, y: hitPoint.z * UNIT + world.home.y }; }
   return {
     ready: readyPromise,
     resize,
+    screenToWorld,
     render(state, dt, now) {
       time.value = now / 1000;
       if (ready) {
@@ -1439,7 +1643,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         updateTurret(state.turret, now, dt);
         if (stage) { stage.visible = lobbyBlend > 0.05; stage.children.forEach(c => { if (c.geometry?.type === 'CylinderGeometry' && c.material?.blending === THREE.AdditiveBlending) c.material.opacity = 0.25 + Math.sin(now / 400 + c.position.x) * 0.1; }); }
         farmBar.sprite.visible = !state.lobby;
-        { const on = !!state.turret?.active, wy = on ? houseTop + 0.55 : houseTop + 1.25, wx = on ? 4.3 : 0, k = Math.min(1, dt * 4); farmBar.sprite.position.y += (wy - farmBar.sprite.position.y) * k; farmBar.sprite.position.x += (wx - farmBar.sprite.position.x) * k; }
+        { const on = !!state.turret?.active, wy = on ? houseTop - 0.55 : houseTop + 1.25, wz = on ? 1.9 : 0, k = Math.min(1, dt * 4); farmBar.sprite.position.y += (wy - farmBar.sprite.position.y) * k; farmBar.sprite.position.z += (wz - farmBar.sprite.position.z) * k; farmBar.sprite.position.x += (0 - farmBar.sprite.position.x) * k; }
+        updateNight(!!state.night, now, dt);
         if (battleFogMesh) battleFogMesh.visible = lobbyBlend < 0.5;
         updateCountdown(state.countdown, state.wave);
         updateCamera(state.players, dt, !!state.lobby);

@@ -18,11 +18,31 @@
       }
     }
   }
+  function setupHowTo() {
+    const box = $("#howto");
+    if (!box) return;
+    const open = () => {
+      box.classList.remove("hidden");
+      box.scrollTop = 0;
+    }, close = () => box.classList.add("hidden");
+    for (const b of document.querySelectorAll(".howto-btn")) b.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.currentTarget.blur();
+      open();
+    });
+    box.addEventListener("click", (e) => {
+      if (e.target === box || e.target.closest(".howto-close")) close();
+    });
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape") close();
+    });
+  }
+  setupHowTo();
   if (hostMode) {
     $("#host").classList.remove("hidden");
-    import("./renderer3d.mjs?v=8.0.2").then(({ createGameRenderer }) => initHost(createGameRenderer)).catch((error) => {
+    import("./renderer3d.mjs?v=9.0.0").then(({ createGameRenderer }) => initHost(createGameRenderer)).catch((error) => {
       console.error(error);
-      $("#assetLoadStatus").textContent = "No se pudo iniciar el renderizado 3D. Revisa la conexi\xF3n y recarga.";
+      $("#assetLoadStatus").textContent = "Could not start 3D rendering. Check your connection and reload.";
       $("#startBtn").disabled = true;
     });
   } else if (room) {
@@ -49,7 +69,7 @@
     const world = { w: 1800, h: 1200, home: { x: 900, y: 650 } };
     const assetStatus = $("#assetLoadStatus"), startButton = $("#startBtn"), obstacleCell = 240, obstacleGrid = /* @__PURE__ */ new Map();
     startButton.disabled = true;
-    assetStatus.textContent = "Precargando modelos 3D en el lobby\u2026";
+    assetStatus.textContent = "Preloading 3D models\u2026";
     const trees = [], decor = [], H = world.home;
     let fenceId = 0;
     const addOb = (o) => {
@@ -113,7 +133,7 @@
       if (!force && now - (p.lastSend || 0) < 90) return;
       p.lastSend = now;
       try {
-        if ((_a = p.conn) == null ? void 0 : _a.open) p.conn.send({ type: "state", started, hp: Math.ceil(p.hp), color: p.color, name: p.name, revive: +(p.revive || 0).toFixed(2), laser: !!p.effects.LASER, seeker: !!p.effects.SEEKER, hulk: !!p.effects.HULK, wave });
+        if ((_a = p.conn) == null ? void 0 : _a.open) p.conn.send({ type: "state", started, hp: Math.ceil(p.effects.HULK ? p.hulkHp : p.hp), color: p.color, name: p.name, revive: +(p.revive || 0).toFixed(2), laser: !!p.effects.LASER, seeker: !!p.effects.SEEKER, hulk: !!p.effects.HULK, wave });
       } catch {
       }
     }
@@ -147,6 +167,10 @@
     }
     function kickPlayer(p) {
       var _a, _b;
+      if (p.conn && p.conn.local) {
+        toggleLocalPlayer();
+        return;
+      }
       kickedIds.add(p.clientId);
       try {
         (_a = p.conn) == null ? void 0 : _a.send({ type: "kicked" });
@@ -177,8 +201,13 @@
         if (p.conn !== conn) return;
         if (d && d.type === "input") {
           p.lastSeen = clock();
-          p.move = screenVectorToWorld(+((_a = d.move) == null ? void 0 : _a.x) || 0, +((_b = d.move) == null ? void 0 : _b.y) || 0);
-          p.aim = screenAngleToWorld(+d.aim || 0);
+          if (d.world) {
+            p.move = { x: +d.move.x || 0, y: +d.move.y || 0 };
+            p.aim = +d.aim || 0;
+          } else {
+            p.move = screenVectorToWorld(+((_a = d.move) == null ? void 0 : _a.x) || 0, +((_b = d.move) == null ? void 0 : _b.y) || 0);
+            p.aim = screenAngleToWorld(+d.aim || 0);
+          }
           p.fire = !!d.fire;
         } else if (d && d.type === "ping") p.lastSeen = clock();
       });
@@ -301,7 +330,7 @@
       $("#runScores").innerHTML = '<table class="score-table"><thead><tr><th>PLAYER</th><th>SCORE</th><th>KILLS</th></tr></thead><tbody>' + [...players.values()].sort((a, b) => b.score - a.score).map((p) => "<tr><td>".concat(escapeText(p.name), "</td><td>").concat(p.score, "</td><td>").concat(p.kills, "</td></tr>")).join("") + "</tbody></table>";
       refreshScoreboards();
       $("#gameOver").classList.remove("hidden");
-      submitGlobal([...players.values()].filter((p) => p.score > 0).map((p) => ({ name: p.name.slice(0, 12), score: Math.floor(p.score), wave: Math.max(1, wave), kills: p.kills, players: Math.max(1, players.size), version: "7.2" })));
+      submitGlobal([...players.values()].filter((p) => p.score > 0).map((p) => ({ name: p.name.slice(0, 12), score: Math.floor(p.score), wave: Math.max(1, wave), kills: p.kills, players: Math.max(1, players.size), version: "9.0" })));
     }
     function screenVectorToWorld(x, y) {
       return { x, y: y / 0.82 };
@@ -502,6 +531,7 @@
       bloodSplats = [];
       fx = [];
       remainingToSpawn = 0;
+      pendingSpawns = [];
       laserWave = 0;
       turret.active = false;
       turret.angle = Math.PI / 2;
@@ -819,6 +849,18 @@
     }
     const dropTypes = { SHIELD: "SHIELD", MEDKIT: "MEDKIT", DOUBLE: "DOUBLE SHOT", RAPID: "RAPID FIRE", TURRET: "CHICKEN TURRET", LASER: "CHICKEN LASER", SEEKER: "CHICKEN SEEKER", HULK: "CHICKEN HULK" };
     const pickupSounds = { SHIELD: new Audio("./assets/audio/powerup-shield.mp3"), DOUBLE: new Audio("./assets/audio/powerup-double-shot.mp3"), RAPID: new Audio("./assets/audio/powerup-rapid-fire.mp3"), LASER: new Audio("./assets/audio/powerup-laser.mp3"), TURRET: new Audio("./assets/audio/powerup-turret.mp3"), MEDKIT: new Audio("./assets/audio/powerup-medkit.mp3"), NEXTWAVE: new Audio("./assets/audio/next-wave.mp3"), SUPER: new Audio("./assets/audio/super-chicken.mp3"), SEEKER: new Audio("./assets/audio/powerup-seeker.mp3"), HULK: new Audio("./assets/audio/powerup-hulk.mp3") };
+    const voiceSrc = { SMASH: "./assets/audio/hulk-smash.mp3" };
+    function playVoice(k) {
+      if (!soundOn) return;
+      try {
+        const a = new Audio(voiceSrc[k]);
+        a.volume = 0.95;
+        const pr = a.play();
+        if (pr && pr.catch) pr.catch(() => {
+        });
+      } catch {
+      }
+    }
     const missingSounds = /* @__PURE__ */ new Set();
     for (const [k, a] of Object.entries(pickupSounds)) a.addEventListener("error", () => missingSounds.add(k));
     for (const sound of Object.values(pickupSounds)) {
@@ -848,6 +890,10 @@
       }
     }
     const ELITE_NAMES = { BOSS: "CHUPACABRAS", MUSHROOM: "MUSHROOM KING", ALIENBOSS: "ALIEN OVERLORD" };
+    const TAUNTS = { BOSS: ["GRRR... CHICKEN DINNER!", "I SMELL EGGS!", "NOBODY ESCAPES THE CHUPACABRAS!", "FEATHERS FOR BREAKFAST!", "HERE I COME!"], MUSHROOM: ["BOW TO THE FUNGUS KING!", "SPREAD THE SPORES!", "MY KINGDOM GROWS!", "MUSH... MUSH... CRUSH!", "ARISE, MY SPORELINGS!"], ALIENBOSS: ["RESISTANCE IS FUTILE, EARTHLINGS.", "TAKE ME TO YOUR HEN.", "PROBING SEQUENCE INITIATED.", "WHICH ONE IS REAL? HA HA HA!", "SHIELDS UP, PUNY CHICKENS."] };
+    function say(e, text, now) {
+      e.say = { text, at: now };
+    }
     function showWaveBanner() {
       const cd = $("#countdown");
       if (!cd) return;
@@ -868,6 +914,10 @@
       superChicken.x = world.w / 2;
       superChicken.y = world.h / 2;
       pushFx("superLaunch", H.x, H.y + 116, { to: { x: superChicken.x, y: superChicken.y }, flight: 1800 });
+      superChicken.cluckAt = now;
+      henCry();
+      setTimeout(henCry, 260);
+      setTimeout(henCry, 560);
       playPickupSound("SUPER");
       toast("MAMA HEN USED SUPER CHICKEN!");
     }
@@ -893,14 +943,28 @@
       }
       toast("BOOM! Super Chicken wiped out " + n + " enemies!");
     }
+    function isNight(w = wave) {
+      return w >= 10 && Math.floor(w / 10) % 2 === 1;
+    }
+    function endHulk(p, why) {
+      if (!p.effects.HULK) return;
+      const pre = p.preHulk || { hp: p.hp, effects: {} };
+      const shield = p.effects.SHIELD;
+      p.effects = Object.assign({}, pre.effects);
+      if (shield) p.effects.SHIELD = Math.max(shield, clock() + 1500);
+      else p.effects.SHIELD = clock() + 1500;
+      p.hp = Math.max(1, pre.hp);
+      p.hulkHp = 0;
+      p.preHulk = null;
+      pushFx("hulkEnd", p.x, p.y, { playerId: p.id });
+      toast(why === "broken" ? p.name + " ran out of HULK power \u2014 back to normal!" : p.name + " is back to normal");
+      send(p, true);
+    }
     function startWave(next) {
-      for (const p of players.values()) if (p.effects.HULK) {
-        delete p.effects.HULK;
-        pushFx("hulkEnd", p.x, p.y, { playerId: p.id });
-        toast(p.name + " is back to normal");
-        send(p, true);
-      }
+      for (const p of players.values()) endHulk(p, "wave");
+      const wasNight = isNight(wave);
       wave = next;
+      if (isNight(next) !== wasNight && next > 1) nightBanner(isNight(next));
       const base = Math.ceil((6 + wave * 3 + Math.floor(Math.pow(wave, 1.35))) * 1.5), playerScale = 1 + Math.max(0, players.size - 1) * 0.25, regular = Math.ceil(base * playerScale), blocks = Math.ceil(regular * 4.5 / 20);
       spawnGroups = [];
       tornadoesThisWave = 0;
@@ -927,6 +991,7 @@
       if (wave >= 7) available.push("MAGE");
       if (wave >= 8) available.push("GHOST");
       if (wave >= 9) available.push("PLANT");
+      if (wave > 10) available.push("MECHAFROG");
       return available[Math.floor(Math.random() * available.length)];
     }
     function makeEnemy(type, x, y, p, now) {
@@ -942,8 +1007,13 @@
       else if (type === "GHOST") Object.assign(stats, { hp: Math.ceil(4 * difficulty), speed: 52 * speedScale, damage: 8 + Math.floor(p * 0.25), r: 25, icon: "\u{1F47B}" });
       else if (type === "PLANT") Object.assign(stats, { hp: Math.ceil(10 * difficulty), speed: 0, damage: (5 + Math.floor(p * 0.2)) * 0.9, r: 27, icon: "\u{1F331}", emergeAt: now + 1900 + Math.random() * 500 });
       else if (type === "FOX") Object.assign(stats, { hp: Math.ceil(3 * difficulty), speed: 53 * speedScale, damage: 5 + Math.floor(p * 0.25), r: 23, icon: "\u{1F98A}" });
+      else if (type === "MECHAFROG") Object.assign(stats, { hp: Math.ceil(16 * difficulty), speed: 30 * speedScale, damage: 9 + Math.floor(p * 0.3), r: 30, icon: "\u{1F438}", nextAbility: now + 3e3 + Math.random() * 2e3, nextFire: now + 2500 + Math.random() * 1500 });
+      else if (type === "MUSHNUB") Object.assign(stats, { hp: 1, speed: 240 * speedScale, damage: 12, r: 15, icon: "\u{1F344}", nextAbility: now + 99999 });
       stats.damage = (stats.damage || 1) * 0.4;
-      if (type === "TORNADO") stats.damage = 2;
+      if (type === "TORNADO") {
+        stats.damage = 2;
+        stats.fire = isNight();
+      }
       stats.maxHp = stats.hp;
       return stats;
     }
@@ -971,6 +1041,18 @@
       const p = wave - 1, { x, y } = findSpawnPosition(46), e = makeElite(type, x, y, p, now);
       if (type === "BOSS" && wave === 5 && !turret.active) e.turretDrop = true;
       if (type === "MUSHROOM" && wave >= 8 && (wave - 8) % 5 === 0) e.seekerDrop = true;
+      e.spawnUntil = now + (type === "BOSS" ? 1300 : 2300);
+      e.spawnAt = now;
+      e.nextAbility = Math.max(e.nextAbility, e.spawnUntil + 1500);
+      e.nextFire = Math.max(e.nextFire, e.spawnUntil + 800);
+      if (type === "ALIENBOSS") {
+        e.nextIllusion = e.spawnUntil + 6e3;
+        e.nextShield = e.spawnUntil + 9e3;
+        e.nextBlink = e.spawnUntil + 3500;
+      }
+      if (type === "MUSHROOM") e.nextSpores = e.spawnUntil + 5e3;
+      if (type === "BOSS") e.nextLeap = e.spawnUntil + 3e3;
+      e.nextTaunt = e.spawnUntil + 500;
       enemies.push(e);
       pushFx("eliteSpawn", x, y, { type });
       toast(e.name + " ELITE INCOMING!");
@@ -987,9 +1069,10 @@
       let amount = spawnGroups.shift() || Math.min(4, remainingToSpawn - elitesToSpawn.length);
       if (amount <= 0) return;
       const type = chooseEnemyType();
-      if (type === "ALIEN" && amount > 3) {
-        spawnGroups.unshift(amount - 3);
-        amount = 3;
+      if ((type === "ALIEN" || type === "MECHAFROG") && amount > (type === "ALIEN" ? 3 : 2)) {
+        const cap = type === "ALIEN" ? 3 : 2;
+        spawnGroups.unshift(amount - cap);
+        amount = cap;
       }
       const tornadoCount = type === "TORNADO" ? Math.min(amount, 2 - tornadoesThisWave) : 0;
       if (tornadoCount) tornadoesThisWave += tornadoCount;
@@ -1061,20 +1144,24 @@
       e.scored = true;
       const p = players.get(id);
       if (!p) return;
-      const value = { FOX: 10, WOLF: 25, EAGLE: 15, SNAKE: 12, MOLE: 12, TORNADO: 22, ALIEN: 22, MAGE: 24, GHOST: 18, PLANT: 20, BOSS: 100, MUSHROOM: 150, ALIENBOSS: 175 }[e.type] || 10;
+      const value = { FOX: 10, WOLF: 25, EAGLE: 15, SNAKE: 12, MOLE: 12, TORNADO: 22, ALIEN: 22, MAGE: 24, GHOST: 18, PLANT: 20, MECHAFROG: 30, MUSHNUB: 3, BOSS: 100, MUSHROOM: 150, ALIENBOSS: 175 }[e.type] || 10;
       p.kills++;
       p.score += value;
     }
     function damagePlayer(target, damage, now) {
       if (target.hp <= 0) return;
       if (now < (target.effects.SHIELD || 0)) return send(target);
-      if (target.effects.HULK) damage *= 0.4;
+      if (target.effects.HULK) {
+        target.hulkHp = Math.max(0, (target.hulkHp || 100) - damage * 0.5);
+        target.lastHit = now;
+        if (target.hulkHp <= 0) endHulk(target, "broken");
+        return send(target, true);
+      }
       target.hp = Math.max(0, target.hp - damage);
       target.lastHit = now;
       if (target.hp === 0) {
         target.deathAt = now;
         target.revive = 0;
-        delete target.effects.HULK;
         if (target.effects.LASER || target.effects.SEEKER) {
           delete target.effects.LASER;
           delete target.effects.SEEKER;
@@ -1104,14 +1191,35 @@
       else damageFarm(damage, now);
     }
     function hittable(e, now) {
-      return e.hp > 0 && !(e.type === "PLANT" && now < (e.emergeAt || 0)) && !(e.type === "MOLE" && (now < e.burrowUntil || now < (e.emergeAt || 0))) && !(e.type === "ALIENBOSS" && now < (e.blinkUntil || 0));
+      return e.hp > 0 && !(now < (e.spawnUntil || 0)) && !(e.type === "PLANT" && now < (e.emergeAt || 0)) && !(e.type === "MOLE" && (now < e.burrowUntil || now < (e.emergeAt || 0))) && !(e.type === "ALIENBOSS" && now < (e.blinkUntil || 0));
     }
     function hitEnemy(e, damage, ownerId, now) {
+      if (now < (e.shieldUntil || 0)) {
+        damage *= e.illusion ? 0.75 : 0.25;
+        e.shieldHitAt = now;
+      }
+      if (e.type === "MAGE" && players.has(ownerId) && !e.aggroId) {
+        e.aggroId = ownerId;
+        e.say = { text: "HOW DARE YOU!", at: now };
+      }
       e.hp -= damage;
       e.lastHitBy = ownerId;
       e.hitUntil = now + 100;
       if (e.hp <= 0) {
         bloodSplats.push({ x: e.x, y: e.y, life: 7, size: 12 + Math.random() * 8, seed: Math.random() * 1e3, elite: !!e.elite });
+        if (e.illusion) {
+          pushFx("illusionPop", e.x, e.y);
+          e.scored = true;
+          const pl = players.get(ownerId);
+          if (pl) pl.score += 10;
+          return;
+        }
+        if (e.type === "ALIENBOSS") {
+          for (const o of enemies) if (o.illusion && o.ownerRef === e && o.hp > 0) {
+            o.hp = 0;
+            pushFx("illusionPop", o.x, o.y);
+          }
+        }
         awardKill(e, ownerId);
         if (e.turretDrop && !turret.active && !drops.some((d) => d.type === "TURRET")) {
           pushDrop(e.x, e.y, "TURRET", Infinity);
@@ -1134,7 +1242,22 @@
       return max;
     }
     function updateEnemy(e, dt, now) {
+      if (now < (e.spawnUntil || 0)) return;
       if ((e.type === "MOLE" || e.type === "PLANT") && now < (e.emergeAt || 0)) return;
+      if (e.elite && !e.illusion && now >= (e.nextTaunt || 0)) {
+        e.nextTaunt = now + 9e3 + Math.random() * 6e3;
+        say(e, TAUNTS[e.type][Math.floor(Math.random() * TAUNTS[e.type].length)], now);
+      }
+      if (e.leapUntil && now < e.leapUntil) {
+        const k = 1 - (e.leapUntil - now) / e.leapDur;
+        e.x = e.leapFrom.x + (e.leapTo.x - e.leapFrom.x) * k;
+        e.y = e.leapFrom.y + (e.leapTo.y - e.leapFrom.y) * k;
+        return;
+      }
+      if (e.leapUntil && !e.landed) {
+        e.landed = true;
+        landLeap(e, now);
+      }
       if (e.type === "TORNADO") {
         if (now < e.launchAt) {
           e.visualScale = 0.35 + 0.8 * Math.min(1, (now - e.bornAt) / 1500);
@@ -1158,6 +1281,15 @@
         return;
       }
       let choice = aimTarget(e);
+      if (e.type === "MAGE") {
+        const ag = e.aggroId && players.get(e.aggroId);
+        choice = ag && ag.hp > 0 ? { obj: ag, type: "player" } : { obj: H, type: "farm" };
+      }
+      if (e.illusion) {
+        const ps = [...players.values()].filter((p) => p.hp > 0);
+        if (!e.fakeTarget || Math.random() < 4e-3) e.fakeTarget = Math.random() < 0.5 || !ps.length ? { x: H.x + (Math.random() - 0.5) * 500, y: H.y + (Math.random() - 0.5) * 400 } : ps[Math.floor(Math.random() * ps.length)];
+        choice = { obj: e.fakeTarget, type: "decoy" };
+      }
       const pack = nearbyEnemies(e, 240);
       if (e.type === "WOLF") {
         const focused = pack.find((o) => o.type === "WOLF" && o.targetId && players.has(o.targetId));
@@ -1170,12 +1302,36 @@
       e.targetId = choice.type === "player" ? target.id : null;
       e.facing = Math.atan2(dy, dx);
       let vx = dx / d, vy = dy / d;
+      if (e.type === "BOSS" && wave > 7 && now >= (e.nextLeap || 0)) {
+        const tgt = [...players.values()].filter((p) => p.hp > 0).sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))[0];
+        const dd = tgt ? Math.hypot(tgt.x - e.x, tgt.y - e.y) : 1e9;
+        if (tgt && dd < 520 && dd > 120) {
+          e.nextLeap = now + 6500 + Math.random() * 3500;
+          startLeap(e, tgt.x, tgt.y, 700, now, "chupa");
+          say(e, "POUNCE!", now);
+          return;
+        } else e.nextLeap = now + 1200;
+      }
       if (e.type === "BOSS" && d < 760 && now >= (e.nextFire || 0)) {
         e.nextFire = now + 2600;
         e.attackAt = now;
         const angle = Math.atan2(dy, dx), speed2 = 310;
         fireballs.push({ x: e.x + Math.cos(angle) * 32, y: e.y + Math.sin(angle) * 32, dx: Math.cos(angle) * speed2, dy: Math.sin(angle) * speed2, t: 3.2, damage: 5.6, kind: "fire" });
         tone(145, 0.24, "sawtooth", 0.045);
+      }
+      if (e.type === "MUSHROOM" && now >= (e.nextSpores || 0)) {
+        e.nextSpores = now + 9500 + Math.random() * 3e3;
+        e.attackAt = now;
+        say(e, "ARISE, MY SPORELINGS!", now);
+        const spots = [];
+        const ps = [...players.values()].filter((p) => p.hp > 0);
+        for (let i = 0; i < 5; i++) {
+          const base = i < 2 && ps.length ? ps[Math.floor(Math.random() * ps.length)] : i % 2 ? H : e;
+          const a = Math.random() * Math.PI * 2, r = 90 + Math.random() * 170, x = Math.max(60, Math.min(world.w - 60, base.x + Math.cos(a) * r)), y = Math.max(60, Math.min(world.h - 60, base.y + Math.sin(a) * r));
+          if (!collidesTree(x, y, 16)) spots.push({ x, y });
+        }
+        pushFx("sporeRain", e.x, e.y, { spots });
+        for (const sp of spots) pendingSpawns.push({ at: now + 1300, type: "MUSHNUB", x: sp.x, y: sp.y });
       }
       if (e.type === "MUSHROOM" && now >= e.nextAbility) {
         e.nextAbility = now + 4600;
@@ -1189,29 +1345,77 @@
         sweep(180, 60, 0.45, "triangle", 0.06);
       }
       if (e.type === "ALIENBOSS") {
+        if (!e.illusion && now >= (e.nextShield || 0)) {
+          e.nextShield = now + 24e3;
+          e.shieldUntil = now + 15e3;
+          say(e, "SHIELDS UP, PUNY CHICKENS.", now);
+          pushFx("shieldUp", e.x, e.y);
+          sweep(200, 1200, 0.5, "sine", 0.05);
+        }
+        if (e.illusion && now >= (e.nextShield || 0)) {
+          e.nextShield = now + 14e3 + Math.random() * 6e3;
+          e.shieldUntil = now + 5e3;
+        }
+        if (!e.illusion && now >= (e.nextIllusion || 0) && enemies.filter((o) => o.illusion && o.ownerRef === e && o.hp > 0).length === 0) {
+          e.nextIllusion = now + 2e4;
+          say(e, "WHICH ONE IS REAL? HA HA HA!", now);
+          const ratio = e.hp / e.maxHp;
+          for (let i = 0; i < 3; i++) {
+            const a = i / 3 * Math.PI * 2 + Math.random(), x = Math.max(80, Math.min(world.w - 80, e.x + Math.cos(a) * 140)), y = Math.max(80, Math.min(world.h - 80, e.y + Math.sin(a) * 140)), hp = Math.max(1, Math.ceil(e.hp * 0.25));
+            const c = Object.assign(makeElite("ALIENBOSS", x, y, wave - 1, now), { illusion: true, ownerRef: e, hp, maxHp: Math.max(hp, Math.round(hp / Math.max(0.05, ratio))), nextShield: now + 2e3 + Math.random() * 4e3, nextBlink: now + 3e3 + Math.random() * 3e3, nextFire: now + 1500 + Math.random() * 1500, teleportAt: now, nextTaunt: Infinity });
+            enemies.push(c);
+            pushFx("teleport", e.x, e.y, { to: { x, y }, color: "#c46bff" });
+          }
+          sweep(600, 2400, 0.4, "sine", 0.04);
+        }
+        if (now >= (e.nextBlink || 0)) {
+          e.nextBlink = now + (e.illusion ? 5500 : 7500) + Math.random() * 2500;
+          const hd = Math.hypot(H.x - e.x, H.y - e.y), goal = e.illusion && e.fakeTarget ? e.fakeTarget : H, gd = Math.hypot(goal.x - e.x, goal.y - e.y);
+          if (gd > 230) {
+            const step = Math.min(gd - 170, 320), a = Math.atan2(goal.y - e.y, goal.x - e.x) + (Math.random() - 0.5) * 0.6, tx = Math.max(80, Math.min(world.w - 80, e.x + Math.cos(a) * step)), ty = Math.max(80, Math.min(world.h - 80, e.y + Math.sin(a) * step));
+            if (!collidesTree(tx, ty, e.r)) {
+              pushFx("ufoBlink", e.x, e.y, { to: { x: tx, y: ty } });
+              e.x = tx;
+              e.y = ty;
+              e.blinkUntil = now + 300;
+              e.teleportAt = now;
+              if (!e.illusion) theremin();
+            }
+          }
+        }
         if (d < 720 && now >= e.nextFire) {
-          e.nextFire = now + 3100;
+          e.nextFire = now + (e.illusion ? 3600 : 3100);
           e.attackAt = now;
           for (const off of [-0.24, 0, 0.24]) {
             const a = Math.atan2(dy, dx) + off, len = beamLength(e.x, e.y, a, Math.min(640, d + 120)), x2 = e.x + Math.cos(a) * len, y2 = e.y + Math.sin(a) * len;
             enemyBeams.push({ x1: e.x + Math.cos(a) * 30, y1: e.y + Math.sin(a) * 30, x2, y2, t: 0.4, color: "#c46bff", width: 2 });
+            if (e.illusion) continue;
             for (const p of players.values()) if (p.hp > 0 && beamHitsPoint(e.x, e.y, x2, y2, p.x, p.y, 28)) damagePlayer(p, 6, now);
             if (off === 0 && choice.type === "farm" && len >= d - 70) damageFarm(6, now);
           }
-          sweep(900, 300, 0.3, "sawtooth", 0.04);
+          if (!e.illusion) sweep(900, 300, 0.3, "sawtooth", 0.04);
         }
-        if (now >= e.nextAbility && d > 220) {
-          e.nextAbility = now + 6200 + Math.random() * 1800;
-          const angle = Math.random() * Math.PI * 2, tx = Math.max(80, Math.min(world.w - 80, target.x + Math.cos(angle) * 230)), ty = Math.max(80, Math.min(world.h - 80, target.y + Math.sin(angle) * 230));
-          if (!collidesTree(tx, ty, e.r)) {
-            pushFx("teleport", e.x, e.y, { to: { x: tx, y: ty }, color: "#c46bff" });
-            e.x = tx;
-            e.y = ty;
-            e.blinkUntil = now + 260;
-            e.teleportAt = now;
-            sweep(300, 1400, 0.25, "sine", 0.04);
+      }
+      if (e.type === "MECHAFROG") {
+        if (now >= e.nextAbility && d < 420 && d > 90) {
+          e.nextAbility = now + 5200 + Math.random() * 2500;
+          startLeap(e, target.x, target.y, 650, now, "frog");
+          return;
+        }
+        if (now >= e.nextFire && d < 620) {
+          e.nextFire = now + 4200 + Math.random() * 1200;
+          e.attackAt = now;
+          const base = Math.atan2(dy, dx);
+          for (const off of [-0.35, 0, 0.35]) {
+            const a = base + off;
+            fireballs.push({ x: e.x + Math.cos(a) * 30, y: e.y + Math.sin(a) * 30, dx: Math.cos(a) * 190, dy: Math.sin(a) * 190, t: 3.6, damage: 4, kind: "rocket", homing: choice.type === "player" ? target.id : "farm" });
           }
+          tone(220, 0.12, "square", 0.03);
         }
+      }
+      if (e.type === "MUSHNUB" && d < e.r + 34) {
+        explodeMushnub(e, now);
+        return;
       }
       if (e.type === "ALIEN" && d < 335 && now >= e.nextFire) {
         e.nextFire = now + 3e3;
@@ -1285,12 +1489,86 @@
         if (e.moving) e.facing = Math.atan2(e.y - oldY, e.x - oldX);
       } else {
         e.moving = false;
-        if (now - e.hitAt > 780) {
+        if (now - e.hitAt > 780 && !e.illusion && choice.type !== "decoy") {
           e.hitAt = now;
           e.attackAt = now;
           applyEnemyDamage(choice, e.damage, now);
         }
       }
+    }
+    function startLeap(e, tx, ty, dur, now, kind) {
+      const a = Math.atan2(ty - e.y, tx - e.x), dist = Math.min(Math.hypot(tx - e.x, ty - e.y), 520);
+      let gx = e.x + Math.cos(a) * dist, gy = e.y + Math.sin(a) * dist;
+      gx = Math.max(e.r, Math.min(world.w - e.r, gx));
+      gy = Math.max(e.r, Math.min(world.h - e.r, gy));
+      for (let k = 0; k < 6 && collidesTree(gx, gy, e.r); k++) {
+        gx -= Math.cos(a) * 40;
+        gy -= Math.sin(a) * 40;
+      }
+      e.leapFrom = { x: e.x, y: e.y };
+      e.leapTo = { x: gx, y: gy };
+      e.leapDur = dur;
+      e.leapUntil = now + dur;
+      e.leapAt = now;
+      e.leapKind = kind;
+      e.landed = false;
+      e.facing = a;
+      sweep(kind === "frog" ? 320 : 140, kind === "frog" ? 700 : 260, 0.25, "square", 0.04);
+    }
+    function landLeap(e, now) {
+      const big = e.leapKind === "chupa", R = big ? 95 : 85, dmg = big ? e.damage * 1.4 : 6;
+      pushFx("crater", e.x, e.y, { big });
+      for (const p of players.values()) if (p.hp > 0 && Math.hypot(p.x - e.x, p.y - e.y) < R) damagePlayer(p, dmg, now);
+      if (Math.hypot(H.x - e.x, H.y - e.y) < R + 80) damageFarm(dmg * 0.6, now);
+      tone(60, 0.35, "sawtooth", 0.08);
+    }
+    function explodeMushnub(e, now) {
+      if (e.hp <= 0) return;
+      e.hp = 0;
+      e.scored = true;
+      pushFx("mushBoom", e.x, e.y);
+      for (const p of players.values()) if (p.hp > 0 && Math.hypot(p.x - e.x, p.y - e.y) < 62) damagePlayer(p, e.damage, now);
+      if (Math.hypot(H.x - e.x, H.y - e.y) < 125) damageFarm(e.damage * 0.5, now);
+      tone(180, 0.12, "square", 0.05);
+    }
+    function theremin() {
+      if (!soundOn || !audio) return;
+      try {
+        const now = audio.currentTime, o = audio.createOscillator(), g = audio.createGain(), l = audio.createOscillator(), lg = audio.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(420, now);
+        o.frequency.exponentialRampToValueAtTime(1500, now + 0.35);
+        o.frequency.exponentialRampToValueAtTime(700, now + 0.6);
+        l.frequency.value = 7;
+        lg.gain.value = 60;
+        l.connect(lg);
+        lg.connect(o.frequency);
+        g.gain.setValueAtTime(1e-3, now);
+        g.gain.linearRampToValueAtTime(0.07, now + 0.05);
+        g.gain.exponentialRampToValueAtTime(1e-3, now + 0.65);
+        o.connect(g);
+        g.connect(audio.destination);
+        o.start(now);
+        l.start(now);
+        o.stop(now + 0.7);
+        l.stop(now + 0.7);
+      } catch {
+      }
+    }
+    let pendingSpawns = [];
+    function processPendingSpawns(now) {
+      if (!pendingSpawns.length) return;
+      const keep = [];
+      for (const ps of pendingSpawns) {
+        if (now < ps.at) {
+          keep.push(ps);
+          continue;
+        }
+        const e = makeEnemy(ps.type, ps.x, ps.y, wave - 1, now);
+        e.bornAt = now;
+        enemies.push(e);
+      }
+      pendingSpawns = keep;
     }
     function makeShot(p, angle) {
       const dx = Math.cos(angle), dy = Math.sin(angle);
@@ -1408,7 +1686,11 @@
       }
       p.punchAt = now;
       pushFx("punch", p.x + Math.cos(a) * 50, p.y + Math.sin(a) * 50, { playerId: p.id, hits });
-      deepPeep();
+      if (hits && now - (p.lastSmash || 0) > 3500 && Math.random() < 0.4) {
+        p.lastSmash = now;
+        p.smashAt = now;
+        playVoice("SMASH");
+      } else deepPeep();
       if (hits) sweep(110, 45, 0.16, "square", 0.06);
     }
     function updateTurret(dt, now) {
@@ -1518,11 +1800,11 @@
           }
         }
         for (const d of drops) {
-          if (!d.taken && !hulk && Math.hypot(d.x - p.x, d.y - p.y) < 46) {
+          if (!d.taken && (!hulk || d.type === "MEDKIT") && Math.hypot(d.x - p.x, d.y - p.y) < 46) {
             d.taken = true;
             pushFx("pickup", d.x, d.y, { type: d.type, playerId: p.id });
             if (d.type === "MEDKIT") {
-              if (p.hp >= 99) {
+              if (hulk || p.hp >= 99) {
                 farmHp = Math.min(100, farmHp + 20);
                 pushFx("henHeal", H.x, H.y);
                 toast(p.name + " was at full health \u2014 the medkit healed MAMA HEN +20%!");
@@ -1546,9 +1828,12 @@
               delete p.effects.LASER;
               toast(p.name + " equipped the CHICKEN SEEKER \u2014 homing missiles!");
             } else if (d.type === "HULK") {
+              const pre = Object.assign({}, p.effects);
+              delete pre.HULK;
+              p.preHulk = { hp: p.hp, effects: pre };
               p.effects.HULK = true;
               p.hulkWave = wave;
-              p.hp = Math.min(100, p.hp + 40);
+              p.hulkHp = 100;
               pushFx("hulk", p.x, p.y, { playerId: p.id });
               toast(p.name + " became CHICKEN HULK until the end of the wave! SMASH!");
             } else if (d.type === "LASER") {
@@ -1568,6 +1853,7 @@
       updateRevives(dt, now);
       updateTurret(dt, now);
       updateSuperChicken(now);
+      processPendingSpawns(now);
       for (const b of shots) {
         if (b.missile) steerMissile(b, dt, now);
         const ox = b.x, oy = b.y;
@@ -1592,6 +1878,14 @@
         lastShotSound = now;
       }
       for (const b of fireballs) {
+        if (b.homing) {
+          const tg = b.homing === "farm" ? H : players.get(b.homing);
+          if (tg && (tg === H || tg.hp > 0)) {
+            const cur = Math.atan2(b.dy, b.dx), want = Math.atan2(tg.y - b.y, tg.x - b.x), df = Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), na = cur + Math.max(-2.2 * dt, Math.min(2.2 * dt, df)), sp = Math.hypot(b.dx, b.dy);
+            b.dx = Math.cos(na) * sp;
+            b.dy = Math.sin(na) * sp;
+          }
+        }
         const ox = b.x, oy = b.y;
         b.x += b.dx * dt;
         b.y += b.dy * dt;
@@ -1649,7 +1943,7 @@
       const now = clock();
       tick(dt, now);
       if (!started) for (const p of players.values()) send(p);
-      game3d.render({ players, enemies, shots, fireballs, drops, enemyBeams, bloodSplats, farmHp, henLastHit, countdown, wave, turret, fx, superChicken, lobby: !started && !gameOver, gameOver }, dt, now);
+      game3d.render({ night: started && isNight(), players, enemies, shots, fireballs, drops, enemyBeams, bloodSplats, farmHp, henLastHit, countdown, wave, turret, fx, superChicken, lobby: !started && !gameOver, gameOver }, dt, now);
       $("#wave").textContent = wave;
       const cd = $("#countdown");
       if (cd) {
@@ -1668,6 +1962,118 @@
       requestAnimationFrame(draw);
     }
     requestAnimationFrame(draw);
+    function nightBanner(night) {
+      const el = $("#nightBanner");
+      if (!el) return;
+      el.className = "night-banner " + (night ? "is-night" : "is-day");
+      el.innerHTML = night ? "<b>\u{1F319} NIGHT FALLS</b><small>DANGER RISES \xB7 FIRE TORNADOS ROAM THE FIELDS</small>" : "<b>\u2600\uFE0F DAWN BREAKS</b><small>THE FLOCK SURVIVED THE NIGHT</small>";
+      void el.offsetWidth;
+      el.classList.add("show");
+      clearTimeout(nightBanner.t);
+      nightBanner.t = setTimeout(() => el.classList.remove("show"), 3600);
+    }
+    let localConn = null, localName = "HOST";
+    const hostKeys = /* @__PURE__ */ new Set(), hostMouse = { x: innerWidth / 2, y: innerHeight / 2, down: false };
+    const hostTyping = (e) => {
+      const t = e.target;
+      return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+    };
+    const localPlayer = () => localConn ? [...players.values()].find((p) => p.conn === localConn) : null;
+    function setLocalButtons() {
+      var _a;
+      for (const b of document.querySelectorAll(".local-play-btn")) {
+        const hud = b.classList.contains("hud-local");
+        b.textContent = localConn ? hud ? "\u2328\uFE0F LEAVE" : "\u2328\uFE0F LEAVE PC PLAYER" : hud ? "\u2328\uFE0F PC PLAYER" : "\u2328\uFE0F PLAY ON THIS PC";
+        b.classList.toggle("on", !!localConn);
+      }
+      canvas.classList.toggle("local-aim", !!localConn);
+      (_a = $("#localHelp")) == null ? void 0 : _a.classList.toggle("hidden", !localConn);
+    }
+    function toggleLocalPlayer() {
+      if (localConn) {
+        const p = localPlayer();
+        localConn.open = false;
+        if (p) {
+          clearTimeout(p.expireTimer);
+          players.delete(p.id);
+        }
+        localConn = null;
+        rosterUpdate();
+        setLocalButtons();
+        return;
+      }
+      let n = "";
+      try {
+        n = localStorage.getItem("chicken-horde-local-name") || "";
+      } catch {
+      }
+      n = (prompt("Name for the keyboard + mouse player:", n || "HOST") || "").trim().slice(0, 12);
+      if (!n) return;
+      localName = n;
+      try {
+        localStorage.setItem("chicken-horde-local-name", n);
+      } catch {
+      }
+      const c = new Emitter();
+      c.open = true;
+      c.local = true;
+      c.send = () => {
+      };
+      c.close = () => {
+      };
+      localConn = c;
+      onIncoming(c);
+      c.emit("data", { type: "join", clientId: "local-pc-player", name: n });
+      setLocalButtons();
+      toast(n + " joined with keyboard + mouse");
+    }
+    for (const b of document.querySelectorAll(".local-play-btn")) b.onclick = (e) => {
+      e.currentTarget.blur();
+      toggleLocalPlayer();
+    };
+    addEventListener("keydown", (e) => {
+      if (!localConn || hostTyping(e)) return;
+      const k = (e.key || "").toLowerCase();
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
+      hostKeys.add(k);
+    });
+    addEventListener("keyup", (e) => {
+      hostKeys.delete((e.key || "").toLowerCase());
+    });
+    addEventListener("blur", () => {
+      hostKeys.clear();
+      hostMouse.down = false;
+    });
+    canvas.addEventListener("mousemove", (e) => {
+      hostMouse.x = e.clientX;
+      hostMouse.y = e.clientY;
+    });
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button === 0 && localConn) hostMouse.down = true;
+    });
+    addEventListener("mouseup", (e) => {
+      if (e.button === 0) hostMouse.down = false;
+    });
+    canvas.addEventListener("contextmenu", (e) => {
+      if (localConn) e.preventDefault();
+    });
+    setInterval(() => {
+      var _a;
+      if (!localConn) return;
+      const p = localPlayer();
+      if (!p) return;
+      const x = (hostKeys.has("d") ? 1 : 0) - (hostKeys.has("a") ? 1 : 0), y = (hostKeys.has("s") ? 1 : 0) - (hostKeys.has("w") ? 1 : 0), m = Math.hypot(x, y), mv = m ? screenVectorToWorld(x / m, y / m) : { x: 0, y: 0 };
+      const ax = (hostKeys.has("arrowright") ? 1 : 0) - (hostKeys.has("arrowleft") ? 1 : 0), ay = (hostKeys.has("arrowdown") ? 1 : 0) - (hostKeys.has("arrowup") ? 1 : 0);
+      let aim = p.aim, fire = hostMouse.down || hostKeys.has(" ");
+      if (ax || ay) {
+        aim = screenAngleToWorld(Math.atan2(ay, ax));
+        fire = true;
+      } else {
+        const w = (_a = game3d == null ? void 0 : game3d.screenToWorld) == null ? void 0 : _a.call(game3d, hostMouse.x, hostMouse.y);
+        if (w && Math.hypot(w.x - p.x, w.y - p.y) > 4) aim = Math.atan2(w.y - p.y, w.x - p.x);
+      }
+      localConn.emit("data", { type: "input", world: true, move: mv, aim, fire });
+    }, 33);
     window.__chickenHorde = { players, get enemies() {
       return enemies;
     }, get drops() {
@@ -1699,7 +2105,9 @@
         tick(0.05, clock());
       }
       return enemies.length;
-    }, addBot: (name) => {
+    }, now: () => clock(), get localPlayer() {
+      return localPlayer();
+    }, toggleLocalPlayer, nightBanner, addBot: (name) => {
       const c = new Emitter();
       c.open = true;
       c.send = () => {
@@ -1714,7 +2122,7 @@
     } };
   }
   function lockMobileZoom() {
-    const isField = (t) => !!t && !!t.closest && !!t.closest("input,textarea,select,label,button,a,form");
+    const isField = (t) => !!t && !!t.closest && !!t.closest("input,textarea,select,label,button,a,form,.howto");
     for (const type of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
     document.addEventListener("touchmove", (e) => {
       if (e.touches.length > 1 || !isField(e.target)) e.preventDefault();
@@ -1957,38 +2365,90 @@
       return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
     };
     const keys = /* @__PURE__ */ new Set();
+    let kbMode = false, kbMoving = false, mouseFire = false, keyFire = false;
+    const ctrlEl = $("#controls"), reticle = document.createElement("div"), aimArrow = document.createElement("div"), kbHelp = document.createElement("div");
+    reticle.className = "kb-reticle";
+    aimArrow.className = "kb-arrow";
+    kbHelp.className = "kb-help";
+    kbHelp.innerHTML = "<b>\u2328\uFE0F KEYBOARD + MOUSE</b><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> MOVE</span><span>\u{1F5B1}\uFE0F MOUSE \xB7 AIM</span><span>CLICK / <kbd>SPACE</kbd> \xB7 FIRE</span><span><kbd>\u2190</kbd><kbd>\u2191</kbd><kbd>\u2193</kbd><kbd>\u2192</kbd> AIM + FIRE</span>";
+    ctrlEl.append(aimArrow, reticle, kbHelp);
+    function setKb(on) {
+      if (kbMode === on) return;
+      kbMode = on;
+      ctrlEl.classList.toggle("kb-mode", on);
+    }
+    try {
+      if (matchMedia("(pointer:fine)").matches && !matchMedia("(pointer:coarse)").matches) setKb(true);
+    } catch {
+    }
+    addEventListener("touchstart", () => setKb(false), { passive: true });
+    function showAim() {
+      aimArrow.style.transform = "translateY(-50%) rotate(".concat(aim, "rad)");
+    }
     addEventListener("keydown", (e) => {
       if (typing(e) || !joined) return;
       const k = (e.key || "").toLowerCase();
-      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
+        e.preventDefault();
+        setKb(true);
+      }
       keys.add(k);
-      if (k === " ") fire = true;
+      if (k === " ") keyFire = true;
     });
     addEventListener("keyup", (e) => {
       if (typing(e)) return;
       const k = (e.key || "").toLowerCase();
       keys.delete(k);
-      if (k === " ") fire = false;
+      if (k === " ") keyFire = false;
     });
     addEventListener("blur", () => {
       keys.clear();
+      keyFire = false;
+      mouseFire = false;
       fire = false;
     });
     addEventListener("mousemove", (e) => {
-      if (joined && e.pointerType !== "touch") aim = Math.atan2(e.clientY - innerHeight / 2, e.clientX - innerWidth / 2);
+      if (!joined) return;
+      if (kbMode) {
+        aim = Math.atan2(e.clientY - innerHeight / 2, e.clientX - innerWidth / 2);
+        reticle.style.left = e.clientX + "px";
+        reticle.style.top = e.clientY + "px";
+        showAim();
+      }
     });
     addEventListener("mousedown", (e) => {
       var _a2, _b;
-      if (joined && e.button === 0 && !((_b = (_a2 = e.target).closest) == null ? void 0 : _b.call(_a2, ".stick-zone,button,input"))) fire = true;
+      if (joined && kbMode && e.button === 0 && !((_b = (_a2 = e.target).closest) == null ? void 0 : _b.call(_a2, ".stick-zone,button,input"))) {
+        mouseFire = true;
+        reticle.classList.add("firing");
+      }
     });
     addEventListener("mouseup", (e) => {
-      var _a2, _b;
-      if (e.button === 0 && !((_b = (_a2 = e.target).closest) == null ? void 0 : _b.call(_a2, ".stick-zone"))) fire = false;
+      if (e.button === 0) {
+        mouseFire = false;
+        reticle.classList.remove("firing");
+      }
+    });
+    addEventListener("contextmenu", (e) => {
+      if (kbMode && joined) e.preventDefault();
     });
     let lastPing = 0;
     setInterval(() => {
-      const x = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0), y = (keys.has("s") || keys.has("arrowdown") ? 1 : 0) - (keys.has("w") || keys.has("arrowup") ? 1 : 0), m = Math.hypot(x, y);
-      if (m) move = { x: x / m, y: y / m };
+      const x = (keys.has("d") ? 1 : 0) - (keys.has("a") ? 1 : 0), y = (keys.has("s") ? 1 : 0) - (keys.has("w") ? 1 : 0), m = Math.hypot(x, y);
+      if (m) {
+        move = { x: x / m, y: y / m };
+        kbMoving = true;
+      } else if (kbMoving) {
+        move = { x: 0, y: 0 };
+        kbMoving = false;
+      }
+      const ax = (keys.has("arrowright") ? 1 : 0) - (keys.has("arrowleft") ? 1 : 0), ay = (keys.has("arrowdown") ? 1 : 0) - (keys.has("arrowup") ? 1 : 0), arrows = !!(ax || ay);
+      if (arrows) {
+        aim = Math.atan2(ay, ax);
+        showAim();
+      }
+      if (kbMode) fire = mouseFire || keyFire || arrows;
+      else if (keyFire || arrows) fire = true;
       if ((conn == null ? void 0 : conn.open) && joined) conn.send({ type: "input", move: { x: +move.x.toFixed(3), y: +move.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
       else if ((conn == null ? void 0 : conn.open) && Date.now() - lastPing > 4e3) {
         lastPing = Date.now();
