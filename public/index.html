@@ -5,7 +5,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="format-detection" content="telephone=no">
   <meta name="theme-color" content="#172c2b"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icons/icon-192.png"><link rel="apple-touch-icon" href="assets/icons/icon-192.png"><meta name="description" content="Chicken Horde — 3D farm defense. Classroom mode with phones as controllers, or online with friends."><title>Chicken Horde 3D</title>
   <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
-  <link rel="stylesheet" href="style.css?v=11.0.0">
+  <link rel="stylesheet" href="style.css?v=11.0.1">
 </head>
 <body>
   <main id="host" class="screen hidden">
@@ -16,7 +16,7 @@
         <div class="eyebrow">ROOM IS OPEN</div><h1>Gather the flock</h1>
         <p>Scan the code with your phone. Your chick appears on the stage as soon as you join.</p>
         <div class="join-box"><img id="qr" class="class-only" alt="QR code to join this lobby"><div class="join-box-info"><small>ROOM CODE</small><div id="roomCode" class="room-code">·····</div><div id="netStatus" class="net-status"></div></div></div>
-        <div id="joinUrl" class="join-url"></div><div class="lobby-actions"><button id="copyInvite" class="hud-action online-only host-only">📋 COPY INVITE</button><button class="hud-action local-play-btn host-only">⌨️ PLAY ON THIS PC</button><button class="hud-action howto-btn">❓ HOW TO PLAY</button></div><div class="lobby-note small-note class-only host-only">No phone? Laptops can join too: open the link and play with keyboard + mouse.</div>
+        <div id="joinUrl" class="join-url"></div><div class="lobby-actions"><button id="copyInvite" class="hud-action online-only host-only">📋 COPY INVITE</button><button class="hud-action local-play-btn host-only">⌨️ PLAY ON THIS PC</button><button class="hud-action howto-btn">❓ HOW TO PLAY</button><a class="hud-action class-only host-only switch-online" href="?host=1&amp;online=1">🌐 SWITCH TO ONLINE ROOM</a></div><div class="lobby-note small-note class-only host-only">CLASSROOM room: everyone looks at THIS screen and uses a phone or laptop as a controller. To play from different houses, each one on their own screen, use 🌐 SWITCH TO ONLINE ROOM.</div>
         <h2 class="flock-title">PLAYERS IN THE FLOCK</h2><div id="roster" class="roster"></div><div id="lobbyEmpty" class="lobby-note">Nobody yet — the stage is waiting for chicks!</div>
         <div id="assetLoadStatus" class="lobby-note asset-loading">Preloading 3D models…</div><div class="lobby-note host-only">This lobby stays open until you press <b>START GAME</b>.</div>
         <section class="leaderboard"><div class="board-head"><h2>HIGH SCORES</h2><div class="board-tabs" data-board="lobbyScores"><button data-mode="global" class="active">🌎 GLOBAL</button><button data-mode="week">7 DAYS</button><button data-mode="local">THIS PC</button></div></div><div id="lobbyScores"></div><small class="board-note"></small></section>
@@ -55,5 +55,5 @@
     <div class="howto-step"><img src="assets/howto/night.jpg" alt="The farm at night" loading="lazy"><div><h3>6 · Night falls at wave 10</h3><p>Waves 10–19 happen at night, 20–29 by day, 30–39 at night again… At night fire tornados roam the fields (just for show). From wave 10 the <b>Mecha Frog</b> joins the horde: it arrives shielded, leaps across the field, fires fast homing rockets and explodes when destroyed. Ghosts can turn <b>ethereal</b> and ignore damage for a moment. Stay sharp!</p></div></div>
     <button class="start howto-close howto-go">GOT IT — LET'S DEFEND THE FARM!</button>
   </div></section>
-  <script src="./vendor/socket.io.min.js"></script><script src="./vendor/qrcode.js"></script><script src="app.js?v=11.0.0"></script>
+  <script src="./vendor/socket.io.min.js"></script><script src="./vendor/qrcode.js"></script><script src="app.js?v=11.0.1"></script>
 </body></html>

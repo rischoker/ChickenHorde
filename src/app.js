@@ -3703,7 +3703,7 @@
     aimArrow.className = 'kb-arrow';
     kbHelp.className = 'kb-help';
     kbHelp.innerHTML =
-      '<b>⌨️ KEYBOARD + MOUSE</b><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> MOVE</span><span>🖱️ MOUSE · AIM</span><span>CLICK / <kbd>SPACE</kbd> · FIRE</span><span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> AIM + FIRE</span>';
+      '<b>⌨️ KEYBOARD + MOUSE</b><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> MOVE</span><span>🖱️ MOUSE · AIM</span><span>CLICK / <kbd>SPACE</kbd> · FIRE</span><span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> AIM + FIRE</span><small class="kb-class-note">📺 CLASSROOM room: the game is shown on the HOST screen (projector). This page is only your controller. To see the game on your own screen, the host must create a 🌐 PLAY ONLINE room.</small>';
     ctrlEl.append(aimArrow, reticle, kbHelp);
     function setKb(on) {
       if (kbMode === on) return;

@@ -1,6 +1,6 @@
 {
   "name": "chicken-horde",
-  "version": "11.0.0",
+  "version": "11.0.1",
   "private": true,
   "description": "Chicken Horde Farm Defense \u2014 Express + Socket.IO server for Render. Host screen + phones as controllers.",
   "main": "server.js",

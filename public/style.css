@@ -115,3 +115,5 @@ body.mirror .kick-button{display:none!important}
 .mode-card:hover{transform:translateY(-2px)}.mode-card b{font-size:16px;letter-spacing:.04em}.mode-card span{font-size:10px;line-height:1.55;opacity:.92}
 .landing-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 #copyInvite{background:#1f4f9a;border-color:#8cc4ff;color:#e6f2ff}
+.kb-class-note{max-width:340px;color:#ffd27a;font-size:10px;line-height:1.5;border-top:1px solid #ffffff22;padding-top:8px}
+.switch-online{text-decoration:none;background:#1f4f9a;border-color:#8cc4ff;color:#e6f2ff}

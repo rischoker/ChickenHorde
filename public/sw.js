@@ -2,7 +2,7 @@
 // - Big assets (models, audio, textures, fonts, libraries): cache first, so the 2nd launch is instant.
 // - Game code and pages: network first (always the newest version), cache only as offline fallback.
 // - Socket.IO and the leaderboard API are never cached.
-const VERSION = 'ch-v11.0.0';
+const VERSION = 'ch-v11.0.1';
 const CORE = ['./', './index.html', './style.css', './app.js', './renderer3d.mjs', './manifest.webmanifest', './vendor/socket.io.min.js', './vendor/qrcode.js'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE).catch(() => {})).then(() => self.skipWaiting()));
