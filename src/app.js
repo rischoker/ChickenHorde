@@ -3,6 +3,7 @@
   const $ = s => document.querySelector(s),
     params = new URLSearchParams(location.search),
     hostMode = params.get('host') === '1',
+    onlineHost = hostMode && params.get('online') === '1',
     room = (params.get('room') || '').trim();
   // Networking: everything goes through this game's own server (Express + Socket.IO on Render).
   // Socket.IO starts with HTTPS long-polling and upgrades to WebSocket when the network allows it,
@@ -48,10 +49,37 @@
     });
   }
   setupHowTo();
+  // ---- Installable app (PWA): offline cache for the big 3D assets + "Install" button ----
+  if ('serviceWorker' in navigator && location.protocol !== 'file:')
+    addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW failed', e)));
+  let installEvent = null;
+  const installBtns = () => document.querySelectorAll('.install-btn');
+  addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    installEvent = e;
+    installBtns().forEach(b => b.classList.remove('hidden'));
+  });
+  addEventListener('appinstalled', () => {
+    installEvent = null;
+    installBtns().forEach(b => b.classList.add('hidden'));
+  });
+  document.addEventListener('click', async e => {
+    const b = e.target.closest && e.target.closest('.install-btn');
+    if (!b) return;
+    e.preventDefault();
+    if (installEvent) {
+      installEvent.prompt();
+      try {
+        await installEvent.userChoice;
+      } catch {}
+      installEvent = null;
+      installBtns().forEach(x => x.classList.add('hidden'));
+    } else alert('To install: open the browser menu (⋮) and choose "Install Chicken Horde" or "Add to Home screen".');
+  });
   if (hostMode) {
     $('#host').classList.remove('hidden');
-    import('./renderer3d.mjs?v=10.0.0')
-      .then(({ createGameRenderer }) => initHost(createGameRenderer))
+    import('./renderer3d.mjs?v=11.0.0')
+      .then(({ createGameRenderer }) => initHost(createGameRenderer, { online: onlineHost }))
       .catch(error => {
         console.error(error);
         $('#assetLoadStatus').textContent = 'Could not start 3D rendering. Check your connection and reload.';
@@ -72,11 +100,25 @@
     });
   }
 
-  function initHost(createGameRenderer) {
+  function initHost(createGameRenderer, opts = {}) {
+    // opts.online: online room (host PC plays and broadcasts snapshots to guest screens).
+    // opts.mirror: this screen is an ONLINE GUEST — it never simulates, it only draws the host's snapshots and sends its input.
+    const isMirror = !!opts.mirror,
+      isOnline = !!opts.online || isMirror,
+      netRec = isOnline && !isMirror,
+      ONLINE_MAX = 6;
+    document.body.classList.toggle('mirror', isMirror);
+    document.body.classList.toggle('online-room', isOnline);
     let timeShift = 0,
       paused = false,
-      godMode = false;
-    const clock = () => performance.now() + timeShift;
+      godMode = false,
+      mirrorOffset = null;
+    const clock = () => (isMirror ? performance.now() + (mirrorOffset || 0) - 70 : performance.now() + timeShift);
+    // Events (sounds, toasts, banners) that guest screens replay.
+    let netEvents = [];
+    const rec = (name, args) => {
+      if (netRec && netEvents.length < 120) netEvents.push([name, ...args]);
+    };
     const canvas = $('#game'),
       lobby = $('#lobby'),
       roster = $('#roster'),
@@ -295,6 +337,10 @@
         }
       }
       $('#lobbyEmpty')?.classList.toggle('hidden', players.size > 0);
+      if (isOnline) {
+        updateNet.last = null;
+        updateNet();
+      }
     }
     function kickPlayer(p) {
       if (p.conn && p.conn.local) {
@@ -483,6 +529,7 @@
         '</tbody></table>';
       refreshScoreboards();
       $('#gameOver').classList.remove('hidden');
+      rec('gameOverScreen', [$('#runSummary').textContent, $('#runScores').innerHTML]);
       submitGlobal(
         [...players.values()]
           .filter(p => p.score > 0)
@@ -492,7 +539,7 @@
             wave: Math.max(1, wave),
             kills: p.kills,
             players: Math.max(1, players.size),
-            version: '10.0'
+            version: '11.0'
           }))
       );
     }
@@ -555,6 +602,18 @@
           .replace(/[\u0000-\u001f]/g, '')
           .trim()
           .slice(0, 12) || 'CHICK';
+      if (!p && isOnline && players.size >= ONLINE_MAX) {
+        try {
+          conn.send({ type: 'full' });
+        } catch {}
+        setTimeout(() => {
+          try {
+            conn.close();
+          } catch {}
+        }, 300);
+        toast('The squad is full (' + ONLINE_MAX + ' chicks max)');
+        return;
+      }
       if (!p) {
         const n = players.size,
           c = choosePlayerColor();
@@ -583,6 +642,7 @@
         if (!started) pushFx('join', p.x, p.y, { playerId: p.id });
       } else p.name = name;
       bindPlayer(conn, p);
+      netForceKey = true;
     }
     // ---------------------------------------------------------------------------
     // Networking (host): the server creates the room code; phones are relayed through it.
@@ -592,14 +652,15 @@
       hostToken = '';
     const net = { server: 'connecting' },
       conns = new Map();
+    const hostKey = 'chicken-horde-host' + (isOnline ? '-online' : '');
     try {
-      const saved = JSON.parse(sessionStorage.getItem('chicken-horde-host') || 'null');
+      const saved = JSON.parse(sessionStorage.getItem(hostKey) || 'null');
       if (saved) {
         roomCode = saved.room || '';
         hostToken = saved.token || '';
       }
     } catch {}
-    const socket = io(ioOptions);
+    const socket = isMirror ? null : io(ioOptions);
     function onIncoming(conn) {
       conn.on('data', d => {
         if (d && d.type === 'join') addPlayer(conn, d);
@@ -609,7 +670,9 @@
       const label = { online: '✓ ONLINE', connecting: '… CONNECTING', reconnecting: '↻ RECONNECTING' }[net.server] || net.server;
       const el = $('#netStatus');
       if (el)
-        el.innerHTML = `<span class="net-${net.server}">SERVER ${label}</span><span class="net-online">📱 ${conns.size} PHONE${conns.size === 1 ? '' : 'S'}</span>`;
+        el.innerHTML = isOnline
+          ? `<span class="net-${net.server}">SERVER ${label}</span><span class="net-online">🐥 ${players.size}/${ONLINE_MAX} CHICKS</span>`
+          : `<span class="net-${net.server}">SERVER ${label}</span><span class="net-online">📱 ${conns.size} PHONE${conns.size === 1 ? '' : 'S'}</span>`;
       const sig = net.server;
       if (sig === updateNet.last) return;
       updateNet.last = sig;
@@ -660,8 +723,9 @@
       updateNet();
       return c;
     }
+    if (socket) {
     socket.on('connect', () => {
-      socket.emit('h:create', { room: roomCode, token: hostToken }, res => {
+      socket.emit('h:create', { room: roomCode, token: hostToken, mode: isOnline ? 'online' : 'class' }, res => {
         if (!res || !res.ok) {
           toast('The server could not open a room — retrying…');
           setTimeout(() => socket.connected && socket.disconnect().connect(), 2000);
@@ -671,7 +735,7 @@
         roomCode = res.room;
         hostToken = res.token;
         try {
-          sessionStorage.setItem('chicken-horde-host', JSON.stringify({ room: roomCode, token: hostToken }));
+          sessionStorage.setItem(hostKey, JSON.stringify({ room: roomCode, token: hostToken }));
         } catch {}
         if (changed) updateJoinInfo();
         net.server = 'online';
@@ -705,6 +769,7 @@
         updateNet();
       }
     });
+    }
     updateNet();
     {
       const z = $('#qrZoom'),
@@ -717,7 +782,7 @@
       $('#startBtn').addEventListener('click', () => show(false));
     }
     function startMatch() {
-      if (started) return;
+      if (started || isMirror) return;
       $('#qrZoom')?.classList.remove('show');
       startMusic();
       gameOver = false;
@@ -759,6 +824,10 @@
     }
     $('#startBtn').onclick = startMatch;
     $('#playAgain').onclick = () => {
+      if (isMirror) {
+        $('#gameOver').classList.add('hidden');
+        return;
+      }
       gameOver = false;
       $('#gameOver').classList.add('hidden');
       lobby.classList.remove('hidden');
@@ -794,6 +863,7 @@
     rosterUpdate();
     let toastTimer = 0;
     function toast(t) {
+      rec('toast', [...arguments]);
       const el = $('#toast');
       el.textContent = t;
       el.classList.add('show');
@@ -804,6 +874,7 @@
       fx.push({ id: ++fxId, kind, x, y, at: clock(), ...extra });
     }
     function tone(freq = 440, duration = 0.1, type = 'sine', volume = 0.035) {
+      rec('tone', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const o = audio.createOscillator(),
@@ -820,6 +891,7 @@
       } catch {}
     }
     function sweep(f1, f2, duration = 0.3, type = 'sine', volume = 0.05) {
+      rec('sweep', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime,
@@ -837,6 +909,7 @@
       } catch {}
     }
     function peep() {
+      rec('peep', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
@@ -860,6 +933,7 @@
       } catch {}
     }
     function teleportSound() {
+      rec('teleportSound', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
@@ -901,6 +975,7 @@
       } catch {}
     }
     function chickDeathSound() {
+      rec('chickDeathSound', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime,
@@ -920,6 +995,7 @@
       } catch {}
     }
     function henCry() {
+      rec('henCry', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime,
@@ -1117,6 +1193,7 @@
     };
     const voiceSrc = { SMASH: './assets/audio/hulk-smash.mp3' };
     function playVoice(k) {
+      rec('playVoice', [...arguments]);
       if (!soundOn) return;
       try {
         const a = new Audio(voiceSrc[k]);
@@ -1132,6 +1209,7 @@
       sound.volume = 0.85;
     }
     function playPickupSound(type) {
+      rec('playPickupSound', [...arguments]);
       if (!soundOn) return;
       const sound = pickupSounds[type];
       if (!sound || missingSounds.has(type)) {
@@ -1178,6 +1256,7 @@
       e.say = { text, at: now };
     }
     function showWaveBanner() {
+      rec('showWaveBanner', [...arguments]);
       const cd = $('#countdown');
       if (!cd) return;
       cd.dataset.v = '';
@@ -1220,6 +1299,7 @@
       fireballs = [];
       enemyBeams = [];
       sweep(120, 30, 1.2, 'sawtooth', 0.12);
+      rec('flash', []);
       const fl = $('#flash');
       if (fl) {
         fl.classList.remove('go');
@@ -2236,6 +2316,7 @@
       });
     }
     function theremin() {
+      rec('theremin', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime,
@@ -2376,6 +2457,7 @@
       sweep(240, 90, 0.2, 'sawtooth', 0.05);
     }
     function deepPeep() {
+      rec('deepPeep', [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
@@ -2712,8 +2794,21 @@
       const dt = Math.min(0.05, (frameTime - last) / 1000);
       last = frameTime;
       const now = clock();
-      tick(dt, now);
-      if (!started) for (const p of players.values()) send(p);
+      if (isMirror) mirrorStep(dt, now);
+      else {
+        tick(dt, now);
+        if (!started) for (const p of players.values()) send(p);
+        if (netRec && socket && socket.connected && now - netLastSnap > 80) {
+          netLastSnap = now;
+          try {
+            const snap = encodeSnapshot(now);
+            if (++netStats.n % 25 === 0) netStats.last = JSON.stringify(snap).length;
+            socket.emit('h:bc', snap);
+          } catch (e) {
+            console.warn('snapshot failed', e);
+          }
+        }
+      }
       game3d.render(
         {
           night: started && isNight(),
@@ -2759,6 +2854,7 @@
 
     // ---- Night / day transition banner -----------------------------------------------
     function nightBanner(night) {
+      rec('nightBanner', [...arguments]);
       const el = $('#nightBanner');
       if (!el) return;
       el.className = 'night-banner ' + (night ? 'is-night' : 'is-day');
@@ -2787,8 +2883,8 @@
         b.textContent = localConn ? (hud ? '⌨️ LEAVE' : '⌨️ LEAVE PC PLAYER') : hud ? '⌨️ PC PLAYER' : '⌨️ PLAY ON THIS PC';
         b.classList.toggle('on', !!localConn);
       }
-      canvas.classList.toggle('local-aim', !!localConn);
-      $('#localHelp')?.classList.toggle('hidden', !localConn);
+      canvas.classList.toggle('local-aim', !!localConn || isMirror);
+      $('#localHelp')?.classList.toggle('hidden', !localConn && !isMirror);
     }
     function toggleLocalPlayer() {
       if (localConn) {
@@ -2830,7 +2926,7 @@
         toggleLocalPlayer();
       };
     addEventListener('keydown', e => {
-      if (!localConn || hostTyping(e)) return;
+      if ((!localConn && !isMirror) || hostTyping(e)) return;
       const k = (e.key || '').toLowerCase();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
       hostKeys.add(k);
@@ -2847,17 +2943,18 @@
       hostMouse.y = e.clientY;
     });
     canvas.addEventListener('mousedown', e => {
-      if (e.button === 0 && localConn) hostMouse.down = true;
+      if (e.button === 0 && (localConn || isMirror)) hostMouse.down = true;
     });
     addEventListener('mouseup', e => {
       if (e.button === 0) hostMouse.down = false;
     });
     canvas.addEventListener('contextmenu', e => {
-      if (localConn) e.preventDefault();
+      if (localConn || isMirror) e.preventDefault();
     });
+    let mirrorAim = 0;
     setInterval(() => {
-      if (!localConn) return;
-      const p = localPlayer();
+      if (!localConn && !isMirror) return;
+      const p = isMirror ? players.get(opts.mirror.clientId) : localPlayer();
       if (!p) return;
       const x = (hostKeys.has('d') ? 1 : 0) - (hostKeys.has('a') ? 1 : 0),
         y = (hostKeys.has('s') ? 1 : 0) - (hostKeys.has('w') ? 1 : 0),
@@ -2874,8 +2971,292 @@
         const w = game3d?.screenToWorld?.(hostMouse.x, hostMouse.y);
         if (w && Math.hypot(w.x - p.x, w.y - p.y) > 4) aim = Math.atan2(w.y - p.y, w.x - p.x);
       }
-      localConn.emit('data', { type: 'input', world: true, move: mv, aim, fire });
-    }, 33);
+      if (isMirror) {
+        if (!(ax || ay) && !game3d?.screenToWorld?.(hostMouse.x, hostMouse.y)) aim = mirrorAim;
+        mirrorAim = aim;
+        opts.mirror.conn.send({ type: 'input', world: true, move: { x: +mv.x.toFixed(3), y: +mv.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
+      } else localConn.emit('data', { type: 'input', world: true, move: mv, aim, fire });
+    }, isMirror ? 50 : 33);
+    if (isMirror) setLocalButtons();
+    // =====================================================================================
+    // ONLINE MODE — the host PC runs the game and broadcasts compact delta snapshots
+    // (~12 per second) through the server; guest screens apply them and draw with the same
+    // 3D renderer. A full keyframe goes out every 5 s and whenever someone joins.
+    // =====================================================================================
+    var netStats = { n: 0, last: 0 },
+      netForceKey = true,
+      netLastSnap = 0,
+      netSeq = 0,
+      netLastKey = 0,
+      netFxSent = 0;
+    const NET_SKIP = new Set([
+      'conn', 'expireTimer', 'preHulk', 'ownerRef', 'fakeTarget', 'goal', 'leapFrom', 'leapTo', 'target', 'lastSeen', 'lastSend', 'hue', 'joinedAt',
+      'routeAngle', 'stuck', 'stuckFor', 'lastPeep', 'lastSmash', 'nid', '_tx', '_ty', 'dashX', 'dashY', 'move'
+    ]);
+    // Collections: which fields the guest advances on its own (so they are only sent once).
+    const NET_COLLS = {
+      players: { local: [] },
+      enemies: { local: [] },
+      shots: { local: ['t'], extrap: o => !o.missile },
+      fireballs: { local: ['t'] },
+      drops: { local: ['life'] },
+      carrots: { local: [] },
+      enemyBeams: { local: ['t'] },
+      bloodSplats: { local: ['life'] }
+    };
+    const netPrev = {};
+    const netIdOf = (name, o) => (name === 'players' ? o.id : o.nid || (o.nid = ++netSeq));
+    function netVal(v) {
+      if (typeof v === 'number') {
+        if (!isFinite(v)) return v > 0 ? 1e12 : -1e12;
+        return Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 100) / 100;
+      }
+      if (v && typeof v === 'object') {
+        try {
+          return JSON.parse(JSON.stringify(v, (k, x) => (typeof x === 'number' ? (isFinite(x) ? Math.round(x * 100) / 100 : 1e12) : x)));
+        } catch {
+          return undefined;
+        }
+      }
+      if (typeof v === 'function') return undefined;
+      return v;
+    }
+    function encColl(name, items, key) {
+      const cfg = NET_COLLS[name],
+        prev = netPrev[name] || (netPrev[name] = new Map()),
+        out = [],
+        seen = new Set();
+      for (const o of items) {
+        const id = netIdOf(name, o);
+        seen.add(id);
+        const last = prev.get(id),
+          rec2 = last || {},
+          diff = { i: id };
+        let n = 0;
+        const extrap = cfg.extrap && cfg.extrap(o);
+        for (const k in o) {
+          if (NET_SKIP.has(k)) continue;
+          if (last && !key && (cfg.local.includes(k) || (extrap && (k === 'x' || k === 'y')))) continue;
+          const ev = netVal(o[k]);
+          if (ev === undefined) continue;
+          const sig = ev !== null && typeof ev === 'object' ? JSON.stringify(ev) : ev;
+          if (key || !last || rec2[k] !== sig) {
+            diff[k] = ev;
+            rec2[k] = sig;
+            n++;
+          }
+        }
+        if (!last) prev.set(id, rec2);
+        if (n || key) out.push(diff);
+      }
+      const rm = [];
+      for (const id of prev.keys())
+        if (!seen.has(id)) {
+          rm.push(id);
+          prev.delete(id);
+        }
+      return { out, rm };
+    }
+    function encodeSnapshot(now) {
+      const key = netForceKey || now - netLastKey > 5000;
+      if (key) {
+        netForceKey = false;
+        netLastKey = now;
+      }
+      const snap = {
+        t: Math.round(now),
+        k: key ? 1 : 0,
+        s: [wave, Math.round(farmHp * 10) / 10, started ? 1 : 0, gameOver ? 1 : 0, Math.round(countdown * 100) / 100, Math.round(henLastHit), remainingToSpawn + enemies.length],
+        tu: netVal({ active: turret.active, angle: turret.angle, lastShot: turret.lastShot, shotAt: turret.shotAt }),
+        sc: netVal(superChicken),
+        c: {},
+        rm: {}
+      };
+      const lists = { players: [...players.values()], enemies, shots, fireballs, drops, carrots, enemyBeams, bloodSplats };
+      for (const name in NET_COLLS) {
+        const { out, rm } = encColl(name, lists[name], key);
+        if (out.length) snap.c[name] = out;
+        if (rm.length) snap.rm[name] = rm;
+      }
+      const newFx = fx.filter(f => f.id > netFxSent || (key && now - f.at < 1500));
+      if (fx.length) netFxSent = Math.max(netFxSent, fx[fx.length - 1].id);
+      if (newFx.length) snap.fx = newFx.map(f => netVal(f));
+      if (netEvents.length) {
+        snap.ev = netEvents;
+        netEvents = [];
+      }
+      return snap;
+    }
+    // ---------------- guest side ----------------
+    const mirrorMaps = {};
+    let mirrorHaveKey = false,
+      mirrorRoster = '';
+    const mirrorStats = (window.__mirrorStats = { n: 0, keys: 0, err: '' });
+    function mirrorApply(snap) {
+      if (!snap) return;
+      mirrorStats.n++;
+      if (snap.k) mirrorStats.keys++;
+      try {
+        mirrorApplyInner(snap);
+      } catch (e) {
+        mirrorStats.err = String(e && e.stack || e).slice(0, 300);
+        console.error('snapshot apply failed', e);
+      }
+    }
+    function mirrorApplyInner(snap) {
+      if (snap.k) mirrorHaveKey = true;
+      if (!mirrorHaveKey) return;
+      const est = snap.t - performance.now();
+      if (mirrorOffset == null || est > mirrorOffset) mirrorOffset = est;
+      else mirrorOffset += (est - mirrorOffset) * 0.02;
+      const [w, fh, st, go, cd, hh, rem] = snap.s;
+      const prevWave = wave,
+        prevGo = gameOver;
+      wave = w;
+      farmHp = fh;
+      started = !!st;
+      gameOver = !!go;
+      countdown = cd;
+      henLastHit = hh;
+      remainingToSpawn = rem;
+      Object.assign(turret, snap.tu || {});
+      Object.assign(superChicken, snap.sc || {});
+      for (const name in NET_COLLS) {
+        const map = mirrorMaps[name] || (mirrorMaps[name] = new Map()),
+          entries = (snap.c && snap.c[name]) || [];
+        if (snap.k) {
+          const keep = new Set(entries.map(e => e.i));
+          for (const id of [...map.keys()]) if (!keep.has(id)) map.delete(id);
+        }
+        for (const e of entries) {
+          let o = map.get(e.i);
+          const fresh = !o;
+          if (fresh) {
+            o = name === 'players' ? { move: { x: 0, y: 0 }, effects: {} } : {};
+            map.set(e.i, o);
+          }
+          for (const k in e) {
+            if (k === 'i') continue;
+            const v = e[k] === 1e12 ? Infinity : e[k];
+            if (!fresh && (k === 'x' || k === 'y') && name !== 'shots' && name !== 'drops' && name !== 'carrots') o['_t' + k] = v;
+            else o[k] = v;
+          }
+          if (name === 'players') o.id = e.i;
+        }
+        for (const id of (snap.rm && snap.rm[name]) || []) map.delete(id);
+      }
+      players.clear();
+      for (const [id, p] of mirrorMaps.players) players.set(id, p);
+      enemies = [...mirrorMaps.enemies.values()];
+      shots = [...mirrorMaps.shots.values()];
+      fireballs = [...mirrorMaps.fireballs.values()];
+      drops = [...mirrorMaps.drops.values()];
+      carrots = [...mirrorMaps.carrots.values()];
+      enemyBeams = [...mirrorMaps.enemyBeams.values()];
+      bloodSplats = [...mirrorMaps.bloodSplats.values()];
+      if (snap.fx) for (const f of snap.fx) if (!fx.some(o => o.id === f.id)) fx.push(f);
+      // DOM: lobby / game over / HUD.
+      if (wave !== prevWave && isNight(wave) !== isNight(prevWave) && wave > 1 && !(snap.ev || []).some(e => e[0] === 'nightBanner')) nightBanner(isNight(wave));
+      lobby.classList.toggle('hidden', started || gameOver);
+      if (!gameOver && prevGo) $('#gameOver').classList.add('hidden');
+      $('#wave').textContent = wave;
+      $('#farmHp').textContent = Math.ceil(farmHp) + '%';
+      $('#enemyCount').textContent = remainingToSpawn;
+      const sig = [...players.values()].map(p => p.id + p.name + p.connected + p.color).join('|');
+      if (sig !== mirrorRoster) {
+        mirrorRoster = sig;
+        rosterUpdate();
+        updateNet();
+      }
+      for (const e of snap.ev || []) mirrorEvent(e);
+    }
+    function mirrorEvent([name, ...a]) {
+      const fns = { toast, tone, sweep, peep, teleportSound, chickDeathSound, henCry, playVoice, playPickupSound, theremin, deepPeep, showWaveBanner, nightBanner };
+      if (name === 'flash') {
+        const fl = $('#flash');
+        if (fl) {
+          fl.classList.remove('go');
+          void fl.offsetWidth;
+          fl.classList.add('go');
+        }
+      } else if (name === 'gameOverScreen') {
+        $('#runSummary').textContent = a[0];
+        $('#runScores').innerHTML = a[1];
+        refreshScoreboards();
+        $('#gameOver').classList.remove('hidden');
+      } else if (fns[name]) {
+        try {
+          fns[name](...a);
+        } catch {}
+      }
+    }
+    function mirrorStep(dt, now) {
+      const k = Math.min(1, dt * 14);
+      const smooth = o => {
+        if (o._tx != null) {
+          const dx = o._tx - o.x,
+            dy = o._ty - o.y;
+          if (Math.abs(dx) > 220 || Math.abs(dy) > 220) {
+            o.x = o._tx;
+            o.y = o._ty;
+          } else {
+            o.x += dx * k;
+            o.y += dy * k;
+          }
+        }
+      };
+      for (const p of players.values()) smooth(p);
+      for (const e of enemies) smooth(e);
+      for (const b of fireballs) {
+        smooth(b);
+        b.t -= dt;
+      }
+      for (const b of shots) {
+        if (!b.missile) {
+          b.x += (b.dx || 0) * dt;
+          b.y += (b.dy || 0) * dt;
+        }
+        b.t -= dt;
+      }
+      for (const d of drops) if (isFinite(d.life)) d.life -= dt;
+      for (const b of enemyBeams) b.t = Math.max(0.001, b.t - dt);
+      for (const s2 of bloodSplats) s2.life = Math.max(0.05, s2.life - dt);
+      fx = fx.filter(f => now - f.at < 4000);
+    }
+    if (isMirror) {
+      opts.mirror.socket.on('c:snap', mirrorApply);
+      // Guest lobby texts.
+      $('#lobby .eyebrow').textContent = 'ONLINE SQUAD · ROOM ' + opts.mirror.room;
+      $('#lobby h1').textContent = 'Waiting for the host';
+      $('#lobby .lobby-card > p').textContent = 'The host starts the match. You play with W A S D + mouse (click or Space to fire).';
+      $('#roomCode').textContent = opts.mirror.room;
+      net.server = 'online';
+      startButton.textContent = 'WAITING FOR HOST';
+      startButton.disabled = true;
+    }
+    if (netRec) {
+      // Online host lobby: invite link instead of "scan with your phone".
+      $('#lobby .eyebrow').textContent = 'ONLINE ROOM · UP TO ' + ONLINE_MAX + ' CHICKS';
+      $('#lobby h1').textContent = 'Gather your squad';
+      $('#lobby .lobby-card > p').textContent = 'Send the invite to up to ' + (ONLINE_MAX - 1) + ' friends. They open it on a computer and play with keyboard + mouse.';
+      const copy = $('#copyInvite');
+      if (copy)
+        copy.onclick = async () => {
+          const url = $('#joinUrl').textContent;
+          const text = 'Join my Chicken Horde farm! 🐥 ' + url;
+          try {
+            await navigator.clipboard.writeText(text);
+            toast('Invite copied — paste it in your chat');
+          } catch {
+            prompt('Copy this invite:', text);
+          }
+        };
+      // The host is a player too.
+      setTimeout(() => {
+        if (!localConn) toggleLocalPlayer();
+      }, 600);
+    }
+
     window.__chickenHorde = {
       players,
       get enemies() {
@@ -2947,6 +3328,11 @@
         return enemies.length;
       },
       now: () => clock(),
+      netStats: () => netStats,
+      netMeasure: key => {
+        if (key) netForceKey = true;
+        return JSON.stringify(encodeSnapshot(clock())).length;
+      },
       get localPlayer() {
         return localPlayer();
       },
@@ -3019,7 +3405,16 @@
       aim = 0,
       fire = false,
       joined = false;
-    let wasKicked = false;
+    let wasKicked = false,
+      roomMode = 'class',
+      mirrorOn = false;
+    const canPlayOnline = () => {
+      try {
+        return matchMedia('(pointer:fine)').matches || !matchMedia('(pointer:coarse)').matches;
+      } catch {
+        return true;
+      }
+    };
     const clientKey = 'chicken-horde-client-id';
     let clientId;
     try {
@@ -3047,12 +3442,16 @@
     }
     function onData(c, d) {
       if (c !== conn || !d) return;
-      if (d.type === 'kicked') {
+      if (d.type === 'kicked' || d.type === 'full') {
         wasKicked = true;
         joined = false;
+        if (mirrorOn) {
+          $('#host').classList.add('hidden');
+          $('#controller').classList.remove('hidden');
+        }
         $('#joinPanel').classList.remove('hidden');
         $('#controls').classList.add('hidden');
-        status.textContent = 'The host removed you from the lobby.';
+        status.textContent = d.type === 'full' ? 'This squad is full — online rooms take 6 chicks max.' : 'The host removed you from the lobby.';
         connStatus.textContent = 'REMOVED';
       } else if (d.type === 'state' && joined) updateBadge(d);
       else if (d.type === 'gameOver') updateBadge({ hp: 0, started: false, over: true });
@@ -3076,7 +3475,9 @@
             res && res.error === 'no-room'
               ? `Room ${roomId} is not open — check the code or wait for the host…`
               : res && res.error === 'full'
-                ? 'This room is full.'
+                ? res.mode === 'online'
+                  ? 'This online squad is full (6 chicks max).'
+                  : 'This room is full.'
                 : 'Trying to reach the host…';
           retryTimer = setTimeout(() => {
             if (socket.connected) joinRoom();
@@ -3084,9 +3485,20 @@
           return;
         }
         conn.open = true;
+        roomMode = res.mode === 'online' ? 'online' : 'class';
+        document.body.classList.toggle('online-room', roomMode === 'online');
+        if (roomMode === 'online' && !joined) {
+          $('#joinPanel .eyebrow').textContent = 'ONLINE ROOM · ' + roomId;
+          $('#joinPanel h1').textContent = 'Join the squad';
+          $('#joinBtn').textContent = 'JOIN ONLINE GAME';
+        }
         connStatus.textContent = res.hostOnline === false ? 'HOST AWAY' : 'CONNECTED';
-        status.textContent = joined ? 'Reconnected. Welcome back!' : 'Connected to the farm.';
+        status.textContent = joined ? 'Reconnected. Welcome back!' : roomMode === 'online' ? 'Online room · you will see the game on this screen and play with keyboard + mouse.' : 'Connected to the farm.';
         $('#joinBtn').disabled = false;
+        if (roomMode === 'online' && !canPlayOnline()) {
+          $('#joinBtn').disabled = true;
+          status.textContent = 'This is an ONLINE room — join it from a computer (keyboard + mouse). Phones work as controllers in classroom rooms.';
+        }
         if (joined) conn.send({ type: 'join', clientId, name: currentName() });
       });
     }
@@ -3191,10 +3603,28 @@
       conn.send({ type: 'join', clientId, name });
       joined = true;
       $('#playerName').blur();
+      if (roomMode === 'online') {
+        startMirror(name);
+        return;
+      }
       $('#joinPanel').classList.add('hidden');
       $('#controls').classList.remove('hidden');
       updateBadge({ name, hp: 100, started: false });
     };
+    // Online guest: switch this page to the full 3D game view (drawn from the host's snapshots).
+    function startMirror(name) {
+      if (mirrorOn) return;
+      mirrorOn = true;
+      $('#controller').classList.add('hidden');
+      $('#host').classList.remove('hidden');
+      $('#assetLoadStatus').textContent = 'Loading the farm…';
+      import('./renderer3d.mjs?v=11.0.0')
+        .then(({ createGameRenderer }) => initHost(createGameRenderer, { online: true, mirror: { socket, conn, clientId, name, room: roomId } }))
+        .catch(error => {
+          console.error(error);
+          $('#assetLoadStatus').textContent = 'Could not start 3D rendering. Check your connection and reload.';
+        });
+    }
     function setupStick(zone, kind) {
       const base = zone.querySelector('.stick-base'),
         knob = zone.querySelector('.stick-knob');
@@ -3354,7 +3784,12 @@
       }
       if (kbMode) fire = mouseFire || keyFire || arrows;
       else if (keyFire || arrows) fire = true;
-      if (conn?.open && joined) conn.send({ type: 'input', move: { x: +move.x.toFixed(3), y: +move.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
+      if (mirrorOn) {
+        if (conn?.open && Date.now() - lastPing > 4000) {
+          lastPing = Date.now();
+          conn.send({ type: 'ping' });
+        }
+      } else if (conn?.open && joined) conn.send({ type: 'input', move: { x: +move.x.toFixed(3), y: +move.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
       else if (conn?.open && Date.now() - lastPing > 4000) {
         lastPing = Date.now();
         conn.send({ type: 'ping' });

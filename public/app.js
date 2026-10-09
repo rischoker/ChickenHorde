@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const $ = (s) => document.querySelector(s), params = new URLSearchParams(location.search), hostMode = params.get("host") === "1", room = (params.get("room") || "").trim();
+  const $ = (s) => document.querySelector(s), params = new URLSearchParams(location.search), hostMode = params.get("host") === "1", onlineHost = hostMode && params.get("online") === "1", room = (params.get("room") || "").trim();
   const ioOptions = { transports: ["polling", "websocket"], reconnection: true, reconnectionDelay: 700, reconnectionDelayMax: 4e3, timeout: 15e3 };
   class Emitter {
     constructor() {
@@ -40,9 +40,36 @@
     });
   }
   setupHowTo();
+  if ("serviceWorker" in navigator && location.protocol !== "file:")
+    addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("SW failed", e)));
+  let installEvent = null;
+  const installBtns = () => document.querySelectorAll(".install-btn");
+  addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installEvent = e;
+    installBtns().forEach((b) => b.classList.remove("hidden"));
+  });
+  addEventListener("appinstalled", () => {
+    installEvent = null;
+    installBtns().forEach((b) => b.classList.add("hidden"));
+  });
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest && e.target.closest(".install-btn");
+    if (!b) return;
+    e.preventDefault();
+    if (installEvent) {
+      installEvent.prompt();
+      try {
+        await installEvent.userChoice;
+      } catch {
+      }
+      installEvent = null;
+      installBtns().forEach((x) => x.classList.add("hidden"));
+    } else alert('To install: open the browser menu (\u22EE) and choose "Install Chicken Horde" or "Add to Home screen".');
+  });
   if (hostMode) {
     $("#host").classList.remove("hidden");
-    import("./renderer3d.mjs?v=10.0.0").then(({ createGameRenderer }) => initHost(createGameRenderer)).catch((error) => {
+    import("./renderer3d.mjs?v=11.0.0").then(({ createGameRenderer }) => initHost(createGameRenderer, { online: onlineHost })).catch((error) => {
       console.error(error);
       $("#assetLoadStatus").textContent = "Could not start 3D rendering. Check your connection and reload.";
       $("#startBtn").disabled = true;
@@ -58,9 +85,16 @@
       if (c.length >= 4) location.search = "?room=" + encodeURIComponent(c);
     });
   }
-  function initHost(createGameRenderer) {
-    let timeShift = 0, paused = false, godMode = false;
-    const clock = () => performance.now() + timeShift;
+  function initHost(createGameRenderer, opts = {}) {
+    const isMirror = !!opts.mirror, isOnline = !!opts.online || isMirror, netRec = isOnline && !isMirror, ONLINE_MAX = 6;
+    document.body.classList.toggle("mirror", isMirror);
+    document.body.classList.toggle("online-room", isOnline);
+    let timeShift = 0, paused = false, godMode = false, mirrorOffset = null;
+    const clock = () => isMirror ? performance.now() + (mirrorOffset || 0) - 70 : performance.now() + timeShift;
+    let netEvents = [];
+    const rec = (name, args) => {
+      if (netRec && netEvents.length < 120) netEvents.push([name, ...args]);
+    };
     const canvas = $("#game"), lobby = $("#lobby"), roster = $("#roster"), players = /* @__PURE__ */ new Map();
     let started = false, gameOver = false, wave = 0, farmHp = 100, shots = [], carrots = [], enemyBeams = [], fireballs = [], enemies = [], drops = [], last = performance.now(), spawn = 0, remainingToSpawn = 0, elitesToSpawn = [], spawnGroups = [], tornadoesThisWave = 0, countdown = 0, audio = null, soundOn = false, lastShotSound = 0, henLastHit = 0, lastHenCry = 0, bloodSplats = [], musicOn = false, musicStarted = false, laserWave = 0, waveGroups = 0, waveElites = 0, fx = [], fxId = 0, dropId = 0;
     const reconnectGrace = 45e3, kickedIds = /* @__PURE__ */ new Set();
@@ -225,6 +259,10 @@
         }
       }
       (_a = $("#lobbyEmpty")) == null ? void 0 : _a.classList.toggle("hidden", players.size > 0);
+      if (isOnline) {
+        updateNet.last = null;
+        updateNet();
+      }
     }
     function kickPlayer(p) {
       var _a, _b;
@@ -395,6 +433,7 @@
       $("#runScores").innerHTML = '<table class="score-table"><thead><tr><th>PLAYER</th><th>SCORE</th><th>KILLS</th></tr></thead><tbody>' + [...players.values()].sort((a, b) => b.score - a.score).map((p) => "<tr><td>".concat(escapeText(p.name), "</td><td>").concat(p.score, "</td><td>").concat(p.kills, "</td></tr>")).join("") + "</tbody></table>";
       refreshScoreboards();
       $("#gameOver").classList.remove("hidden");
+      rec("gameOverScreen", [$("#runSummary").textContent, $("#runScores").innerHTML]);
       submitGlobal(
         [...players.values()].filter((p) => p.score > 0).map((p) => ({
           name: p.name.slice(0, 12),
@@ -402,7 +441,7 @@
           wave: Math.max(1, wave),
           kills: p.kills,
           players: Math.max(1, players.size),
-          version: "10.0"
+          version: "11.0"
         }))
       );
     }
@@ -450,6 +489,20 @@
       }
       let p = [...players.values()].find((v) => v.clientId === clientId);
       const name = String(msg.name || "CHICK").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 12) || "CHICK";
+      if (!p && isOnline && players.size >= ONLINE_MAX) {
+        try {
+          conn.send({ type: "full" });
+        } catch {
+        }
+        setTimeout(() => {
+          try {
+            conn.close();
+          } catch {
+          }
+        }, 300);
+        toast("The squad is full (" + ONLINE_MAX + " chicks max)");
+        return;
+      }
       if (!p) {
         const n = players.size, c = choosePlayerColor();
         p = {
@@ -477,18 +530,20 @@
         if (!started) pushFx("join", p.x, p.y, { playerId: p.id });
       } else p.name = name;
       bindPlayer(conn, p);
+      netForceKey = true;
     }
     let roomCode = "", hostToken = "";
     const net = { server: "connecting" }, conns = /* @__PURE__ */ new Map();
+    const hostKey = "chicken-horde-host" + (isOnline ? "-online" : "");
     try {
-      const saved = JSON.parse(sessionStorage.getItem("chicken-horde-host") || "null");
+      const saved = JSON.parse(sessionStorage.getItem(hostKey) || "null");
       if (saved) {
         roomCode = saved.room || "";
         hostToken = saved.token || "";
       }
     } catch {
     }
-    const socket = io(ioOptions);
+    const socket = isMirror ? null : io(ioOptions);
     function onIncoming(conn) {
       conn.on("data", (d) => {
         if (d && d.type === "join") addPlayer(conn, d);
@@ -498,7 +553,7 @@
       const label = { online: "\u2713 ONLINE", connecting: "\u2026 CONNECTING", reconnecting: "\u21BB RECONNECTING" }[net.server] || net.server;
       const el = $("#netStatus");
       if (el)
-        el.innerHTML = '<span class="net-'.concat(net.server, '">SERVER ').concat(label, '</span><span class="net-online">\u{1F4F1} ').concat(conns.size, " PHONE").concat(conns.size === 1 ? "" : "S", "</span>");
+        el.innerHTML = isOnline ? '<span class="net-'.concat(net.server, '">SERVER ').concat(label, '</span><span class="net-online">\u{1F425} ').concat(players.size, "/").concat(ONLINE_MAX, " CHICKS</span>") : '<span class="net-'.concat(net.server, '">SERVER ').concat(label, '</span><span class="net-online">\u{1F4F1} ').concat(conns.size, " PHONE").concat(conns.size === 1 ? "" : "S", "</span>");
       const sig = net.server;
       if (sig === updateNet.last) return;
       updateNet.last = sig;
@@ -550,55 +605,57 @@
       updateNet();
       return c;
     }
-    socket.on("connect", () => {
-      socket.emit("h:create", { room: roomCode, token: hostToken }, (res) => {
-        if (!res || !res.ok) {
-          toast("The server could not open a room \u2014 retrying\u2026");
-          setTimeout(() => socket.connected && socket.disconnect().connect(), 2e3);
-          return;
+    if (socket) {
+      socket.on("connect", () => {
+        socket.emit("h:create", { room: roomCode, token: hostToken, mode: isOnline ? "online" : "class" }, (res) => {
+          if (!res || !res.ok) {
+            toast("The server could not open a room \u2014 retrying\u2026");
+            setTimeout(() => socket.connected && socket.disconnect().connect(), 2e3);
+            return;
+          }
+          const changed = res.room !== roomCode || !$("#qr").getAttribute("src");
+          roomCode = res.room;
+          hostToken = res.token;
+          try {
+            sessionStorage.setItem(hostKey, JSON.stringify({ room: roomCode, token: hostToken }));
+          } catch {
+          }
+          if (changed) updateJoinInfo();
+          net.server = "online";
+          updateNet();
+        });
+      });
+      socket.on("disconnect", () => {
+        net.server = "reconnecting";
+        for (const c of conns.values()) {
+          c.open = false;
+          c.emit("close");
         }
-        const changed = res.room !== roomCode || !$("#qr").getAttribute("src");
-        roomCode = res.room;
-        hostToken = res.token;
-        try {
-          sessionStorage.setItem("chicken-horde-host", JSON.stringify({ room: roomCode, token: hostToken }));
-        } catch {
-        }
-        if (changed) updateJoinInfo();
-        net.server = "online";
+        conns.clear();
         updateNet();
       });
-    });
-    socket.on("disconnect", () => {
-      net.server = "reconnecting";
-      for (const c of conns.values()) {
-        c.open = false;
-        c.emit("close");
-      }
-      conns.clear();
-      updateNet();
-    });
-    socket.on("connect_error", () => {
-      if (net.server !== "online") {
-        net.server = "reconnecting";
-        updateNet();
-      }
-    });
-    socket.on("h:open", ({ sid }) => makeConn(sid));
-    socket.on("h:d", ({ sid, d }) => {
-      var _a;
-      return (_a = conns.get(sid)) == null ? void 0 : _a.emit("data", d);
-    });
-    socket.on("h:close", ({ sid }) => {
-      const c = conns.get(sid);
-      if (c) {
-        c.open = false;
-        conns.delete(sid);
-        c.emit("close");
-        updateNet.last = null;
-        updateNet();
-      }
-    });
+      socket.on("connect_error", () => {
+        if (net.server !== "online") {
+          net.server = "reconnecting";
+          updateNet();
+        }
+      });
+      socket.on("h:open", ({ sid }) => makeConn(sid));
+      socket.on("h:d", ({ sid, d }) => {
+        var _a;
+        return (_a = conns.get(sid)) == null ? void 0 : _a.emit("data", d);
+      });
+      socket.on("h:close", ({ sid }) => {
+        const c = conns.get(sid);
+        if (c) {
+          c.open = false;
+          conns.delete(sid);
+          c.emit("close");
+          updateNet.last = null;
+          updateNet();
+        }
+      });
+    }
     updateNet();
     {
       const z = $("#qrZoom"), q = $("#qr"), show = (v) => z.classList.toggle("show", v);
@@ -610,7 +667,7 @@
     }
     function startMatch() {
       var _a;
-      if (started) return;
+      if (started || isMirror) return;
       (_a = $("#qrZoom")) == null ? void 0 : _a.classList.remove("show");
       startMusic();
       gameOver = false;
@@ -652,6 +709,10 @@
     }
     $("#startBtn").onclick = startMatch;
     $("#playAgain").onclick = () => {
+      if (isMirror) {
+        $("#gameOver").classList.add("hidden");
+        return;
+      }
       gameOver = false;
       $("#gameOver").classList.add("hidden");
       lobby.classList.remove("hidden");
@@ -685,6 +746,7 @@
     rosterUpdate();
     let toastTimer = 0;
     function toast(t) {
+      rec("toast", [...arguments]);
       const el = $("#toast");
       el.textContent = t;
       el.classList.add("show");
@@ -695,6 +757,7 @@
       fx.push({ id: ++fxId, kind, x, y, at: clock(), ...extra });
     }
     function tone(freq = 440, duration = 0.1, type = "sine", volume = 0.035) {
+      rec("tone", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const o = audio.createOscillator(), g = audio.createGain(), now = audio.currentTime;
@@ -710,6 +773,7 @@
       }
     }
     function sweep(f1, f2, duration = 0.3, type = "sine", volume = 0.05) {
+      rec("sweep", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
@@ -726,6 +790,7 @@
       }
     }
     function peep() {
+      rec("peep", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
@@ -749,6 +814,7 @@
       }
     }
     function teleportSound() {
+      rec("teleportSound", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
@@ -786,6 +852,7 @@
       }
     }
     function chickDeathSound() {
+      rec("chickDeathSound", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
@@ -804,6 +871,7 @@
       }
     }
     function henCry() {
+      rec("henCry", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
@@ -976,6 +1044,7 @@
     };
     const voiceSrc = { SMASH: "./assets/audio/hulk-smash.mp3" };
     function playVoice(k) {
+      rec("playVoice", [...arguments]);
       if (!soundOn) return;
       try {
         const a = new Audio(voiceSrc[k]);
@@ -993,6 +1062,7 @@
       sound.volume = 0.85;
     }
     function playPickupSound(type) {
+      rec("playPickupSound", [...arguments]);
       if (!soundOn) return;
       const sound = pickupSounds[type];
       if (!sound || missingSounds.has(type)) {
@@ -1040,6 +1110,7 @@
       e.say = { text, at: now };
     }
     function showWaveBanner() {
+      rec("showWaveBanner", [...arguments]);
       const cd = $("#countdown");
       if (!cd) return;
       cd.dataset.v = "";
@@ -1081,6 +1152,7 @@
       fireballs = [];
       enemyBeams = [];
       sweep(120, 30, 1.2, "sawtooth", 0.12);
+      rec("flash", []);
       const fl = $("#flash");
       if (fl) {
         fl.classList.remove("go");
@@ -2013,6 +2085,7 @@
       });
     }
     function theremin() {
+      rec("theremin", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime, o = audio.createOscillator(), g = audio.createGain(), l = audio.createOscillator(), lg = audio.createGain();
@@ -2135,6 +2208,7 @@
       sweep(240, 90, 0.2, "sawtooth", 0.05);
     }
     function deepPeep() {
+      rec("deepPeep", [...arguments]);
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
@@ -2452,8 +2526,21 @@
       const dt = Math.min(0.05, (frameTime - last) / 1e3);
       last = frameTime;
       const now = clock();
-      tick(dt, now);
-      if (!started) for (const p of players.values()) send(p);
+      if (isMirror) mirrorStep(dt, now);
+      else {
+        tick(dt, now);
+        if (!started) for (const p of players.values()) send(p);
+        if (netRec && socket && socket.connected && now - netLastSnap > 80) {
+          netLastSnap = now;
+          try {
+            const snap = encodeSnapshot(now);
+            if (++netStats.n % 25 === 0) netStats.last = JSON.stringify(snap).length;
+            socket.emit("h:bc", snap);
+          } catch (e) {
+            console.warn("snapshot failed", e);
+          }
+        }
+      }
       game3d.render(
         {
           night: started && isNight(),
@@ -2497,6 +2584,7 @@
     }
     requestAnimationFrame(draw);
     function nightBanner(night) {
+      rec("nightBanner", [...arguments]);
       const el = $("#nightBanner");
       if (!el) return;
       el.className = "night-banner " + (night ? "is-night" : "is-day");
@@ -2520,8 +2608,8 @@
         b.textContent = localConn ? hud ? "\u2328\uFE0F LEAVE" : "\u2328\uFE0F LEAVE PC PLAYER" : hud ? "\u2328\uFE0F PC PLAYER" : "\u2328\uFE0F PLAY ON THIS PC";
         b.classList.toggle("on", !!localConn);
       }
-      canvas.classList.toggle("local-aim", !!localConn);
-      (_a = $("#localHelp")) == null ? void 0 : _a.classList.toggle("hidden", !localConn);
+      canvas.classList.toggle("local-aim", !!localConn || isMirror);
+      (_a = $("#localHelp")) == null ? void 0 : _a.classList.toggle("hidden", !localConn && !isMirror);
     }
     function toggleLocalPlayer() {
       if (localConn) {
@@ -2567,7 +2655,7 @@
         toggleLocalPlayer();
       };
     addEventListener("keydown", (e) => {
-      if (!localConn || hostTyping(e)) return;
+      if (!localConn && !isMirror || hostTyping(e)) return;
       const k = (e.key || "").toLowerCase();
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
       hostKeys.add(k);
@@ -2584,18 +2672,19 @@
       hostMouse.y = e.clientY;
     });
     canvas.addEventListener("mousedown", (e) => {
-      if (e.button === 0 && localConn) hostMouse.down = true;
+      if (e.button === 0 && (localConn || isMirror)) hostMouse.down = true;
     });
     addEventListener("mouseup", (e) => {
       if (e.button === 0) hostMouse.down = false;
     });
     canvas.addEventListener("contextmenu", (e) => {
-      if (localConn) e.preventDefault();
+      if (localConn || isMirror) e.preventDefault();
     });
+    let mirrorAim = 0;
     setInterval(() => {
-      var _a;
-      if (!localConn) return;
-      const p = localPlayer();
+      var _a, _b;
+      if (!localConn && !isMirror) return;
+      const p = isMirror ? players.get(opts.mirror.clientId) : localPlayer();
       if (!p) return;
       const x = (hostKeys.has("d") ? 1 : 0) - (hostKeys.has("a") ? 1 : 0), y = (hostKeys.has("s") ? 1 : 0) - (hostKeys.has("w") ? 1 : 0), m = Math.hypot(x, y), mv = m ? screenVectorToWorld(x / m, y / m) : { x: 0, y: 0 };
       const ax = (hostKeys.has("arrowright") ? 1 : 0) - (hostKeys.has("arrowleft") ? 1 : 0), ay = (hostKeys.has("arrowdown") ? 1 : 0) - (hostKeys.has("arrowup") ? 1 : 0);
@@ -2607,8 +2696,291 @@
         const w = (_a = game3d == null ? void 0 : game3d.screenToWorld) == null ? void 0 : _a.call(game3d, hostMouse.x, hostMouse.y);
         if (w && Math.hypot(w.x - p.x, w.y - p.y) > 4) aim = Math.atan2(w.y - p.y, w.x - p.x);
       }
-      localConn.emit("data", { type: "input", world: true, move: mv, aim, fire });
-    }, 33);
+      if (isMirror) {
+        if (!(ax || ay) && !((_b = game3d == null ? void 0 : game3d.screenToWorld) == null ? void 0 : _b.call(game3d, hostMouse.x, hostMouse.y))) aim = mirrorAim;
+        mirrorAim = aim;
+        opts.mirror.conn.send({ type: "input", world: true, move: { x: +mv.x.toFixed(3), y: +mv.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
+      } else localConn.emit("data", { type: "input", world: true, move: mv, aim, fire });
+    }, isMirror ? 50 : 33);
+    if (isMirror) setLocalButtons();
+    var netStats = { n: 0, last: 0 }, netForceKey = true, netLastSnap = 0, netSeq = 0, netLastKey = 0, netFxSent = 0;
+    const NET_SKIP = /* @__PURE__ */ new Set([
+      "conn",
+      "expireTimer",
+      "preHulk",
+      "ownerRef",
+      "fakeTarget",
+      "goal",
+      "leapFrom",
+      "leapTo",
+      "target",
+      "lastSeen",
+      "lastSend",
+      "hue",
+      "joinedAt",
+      "routeAngle",
+      "stuck",
+      "stuckFor",
+      "lastPeep",
+      "lastSmash",
+      "nid",
+      "_tx",
+      "_ty",
+      "dashX",
+      "dashY",
+      "move"
+    ]);
+    const NET_COLLS = {
+      players: { local: [] },
+      enemies: { local: [] },
+      shots: { local: ["t"], extrap: (o) => !o.missile },
+      fireballs: { local: ["t"] },
+      drops: { local: ["life"] },
+      carrots: { local: [] },
+      enemyBeams: { local: ["t"] },
+      bloodSplats: { local: ["life"] }
+    };
+    const netPrev = {};
+    const netIdOf = (name, o) => name === "players" ? o.id : o.nid || (o.nid = ++netSeq);
+    function netVal(v) {
+      if (typeof v === "number") {
+        if (!isFinite(v)) return v > 0 ? 1e12 : -1e12;
+        return Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 100) / 100;
+      }
+      if (v && typeof v === "object") {
+        try {
+          return JSON.parse(JSON.stringify(v, (k, x) => typeof x === "number" ? isFinite(x) ? Math.round(x * 100) / 100 : 1e12 : x));
+        } catch {
+          return void 0;
+        }
+      }
+      if (typeof v === "function") return void 0;
+      return v;
+    }
+    function encColl(name, items, key) {
+      const cfg = NET_COLLS[name], prev = netPrev[name] || (netPrev[name] = /* @__PURE__ */ new Map()), out = [], seen = /* @__PURE__ */ new Set();
+      for (const o of items) {
+        const id = netIdOf(name, o);
+        seen.add(id);
+        const last2 = prev.get(id), rec2 = last2 || {}, diff = { i: id };
+        let n = 0;
+        const extrap = cfg.extrap && cfg.extrap(o);
+        for (const k in o) {
+          if (NET_SKIP.has(k)) continue;
+          if (last2 && !key && (cfg.local.includes(k) || extrap && (k === "x" || k === "y"))) continue;
+          const ev = netVal(o[k]);
+          if (ev === void 0) continue;
+          const sig = ev !== null && typeof ev === "object" ? JSON.stringify(ev) : ev;
+          if (key || !last2 || rec2[k] !== sig) {
+            diff[k] = ev;
+            rec2[k] = sig;
+            n++;
+          }
+        }
+        if (!last2) prev.set(id, rec2);
+        if (n || key) out.push(diff);
+      }
+      const rm = [];
+      for (const id of prev.keys())
+        if (!seen.has(id)) {
+          rm.push(id);
+          prev.delete(id);
+        }
+      return { out, rm };
+    }
+    function encodeSnapshot(now) {
+      const key = netForceKey || now - netLastKey > 5e3;
+      if (key) {
+        netForceKey = false;
+        netLastKey = now;
+      }
+      const snap = {
+        t: Math.round(now),
+        k: key ? 1 : 0,
+        s: [wave, Math.round(farmHp * 10) / 10, started ? 1 : 0, gameOver ? 1 : 0, Math.round(countdown * 100) / 100, Math.round(henLastHit), remainingToSpawn + enemies.length],
+        tu: netVal({ active: turret.active, angle: turret.angle, lastShot: turret.lastShot, shotAt: turret.shotAt }),
+        sc: netVal(superChicken),
+        c: {},
+        rm: {}
+      };
+      const lists = { players: [...players.values()], enemies, shots, fireballs, drops, carrots, enemyBeams, bloodSplats };
+      for (const name in NET_COLLS) {
+        const { out, rm } = encColl(name, lists[name], key);
+        if (out.length) snap.c[name] = out;
+        if (rm.length) snap.rm[name] = rm;
+      }
+      const newFx = fx.filter((f) => f.id > netFxSent || key && now - f.at < 1500);
+      if (fx.length) netFxSent = Math.max(netFxSent, fx[fx.length - 1].id);
+      if (newFx.length) snap.fx = newFx.map((f) => netVal(f));
+      if (netEvents.length) {
+        snap.ev = netEvents;
+        netEvents = [];
+      }
+      return snap;
+    }
+    const mirrorMaps = {};
+    let mirrorHaveKey = false, mirrorRoster = "";
+    const mirrorStats = window.__mirrorStats = { n: 0, keys: 0, err: "" };
+    function mirrorApply(snap) {
+      if (!snap) return;
+      mirrorStats.n++;
+      if (snap.k) mirrorStats.keys++;
+      try {
+        mirrorApplyInner(snap);
+      } catch (e) {
+        mirrorStats.err = String(e && e.stack || e).slice(0, 300);
+        console.error("snapshot apply failed", e);
+      }
+    }
+    function mirrorApplyInner(snap) {
+      if (snap.k) mirrorHaveKey = true;
+      if (!mirrorHaveKey) return;
+      const est = snap.t - performance.now();
+      if (mirrorOffset == null || est > mirrorOffset) mirrorOffset = est;
+      else mirrorOffset += (est - mirrorOffset) * 0.02;
+      const [w, fh, st, go, cd, hh, rem] = snap.s;
+      const prevWave = wave, prevGo = gameOver;
+      wave = w;
+      farmHp = fh;
+      started = !!st;
+      gameOver = !!go;
+      countdown = cd;
+      henLastHit = hh;
+      remainingToSpawn = rem;
+      Object.assign(turret, snap.tu || {});
+      Object.assign(superChicken, snap.sc || {});
+      for (const name in NET_COLLS) {
+        const map = mirrorMaps[name] || (mirrorMaps[name] = /* @__PURE__ */ new Map()), entries = snap.c && snap.c[name] || [];
+        if (snap.k) {
+          const keep = new Set(entries.map((e) => e.i));
+          for (const id of [...map.keys()]) if (!keep.has(id)) map.delete(id);
+        }
+        for (const e of entries) {
+          let o = map.get(e.i);
+          const fresh = !o;
+          if (fresh) {
+            o = name === "players" ? { move: { x: 0, y: 0 }, effects: {} } : {};
+            map.set(e.i, o);
+          }
+          for (const k in e) {
+            if (k === "i") continue;
+            const v = e[k] === 1e12 ? Infinity : e[k];
+            if (!fresh && (k === "x" || k === "y") && name !== "shots" && name !== "drops" && name !== "carrots") o["_t" + k] = v;
+            else o[k] = v;
+          }
+          if (name === "players") o.id = e.i;
+        }
+        for (const id of snap.rm && snap.rm[name] || []) map.delete(id);
+      }
+      players.clear();
+      for (const [id, p] of mirrorMaps.players) players.set(id, p);
+      enemies = [...mirrorMaps.enemies.values()];
+      shots = [...mirrorMaps.shots.values()];
+      fireballs = [...mirrorMaps.fireballs.values()];
+      drops = [...mirrorMaps.drops.values()];
+      carrots = [...mirrorMaps.carrots.values()];
+      enemyBeams = [...mirrorMaps.enemyBeams.values()];
+      bloodSplats = [...mirrorMaps.bloodSplats.values()];
+      if (snap.fx) {
+        for (const f of snap.fx) if (!fx.some((o) => o.id === f.id)) fx.push(f);
+      }
+      if (wave !== prevWave && isNight(wave) !== isNight(prevWave) && wave > 1 && !(snap.ev || []).some((e) => e[0] === "nightBanner")) nightBanner(isNight(wave));
+      lobby.classList.toggle("hidden", started || gameOver);
+      if (!gameOver && prevGo) $("#gameOver").classList.add("hidden");
+      $("#wave").textContent = wave;
+      $("#farmHp").textContent = Math.ceil(farmHp) + "%";
+      $("#enemyCount").textContent = remainingToSpawn;
+      const sig = [...players.values()].map((p) => p.id + p.name + p.connected + p.color).join("|");
+      if (sig !== mirrorRoster) {
+        mirrorRoster = sig;
+        rosterUpdate();
+        updateNet();
+      }
+      for (const e of snap.ev || []) mirrorEvent(e);
+    }
+    function mirrorEvent([name, ...a]) {
+      const fns = { toast, tone, sweep, peep, teleportSound, chickDeathSound, henCry, playVoice, playPickupSound, theremin, deepPeep, showWaveBanner, nightBanner };
+      if (name === "flash") {
+        const fl = $("#flash");
+        if (fl) {
+          fl.classList.remove("go");
+          void fl.offsetWidth;
+          fl.classList.add("go");
+        }
+      } else if (name === "gameOverScreen") {
+        $("#runSummary").textContent = a[0];
+        $("#runScores").innerHTML = a[1];
+        refreshScoreboards();
+        $("#gameOver").classList.remove("hidden");
+      } else if (fns[name]) {
+        try {
+          fns[name](...a);
+        } catch {
+        }
+      }
+    }
+    function mirrorStep(dt, now) {
+      const k = Math.min(1, dt * 14);
+      const smooth = (o) => {
+        if (o._tx != null) {
+          const dx = o._tx - o.x, dy = o._ty - o.y;
+          if (Math.abs(dx) > 220 || Math.abs(dy) > 220) {
+            o.x = o._tx;
+            o.y = o._ty;
+          } else {
+            o.x += dx * k;
+            o.y += dy * k;
+          }
+        }
+      };
+      for (const p of players.values()) smooth(p);
+      for (const e of enemies) smooth(e);
+      for (const b of fireballs) {
+        smooth(b);
+        b.t -= dt;
+      }
+      for (const b of shots) {
+        if (!b.missile) {
+          b.x += (b.dx || 0) * dt;
+          b.y += (b.dy || 0) * dt;
+        }
+        b.t -= dt;
+      }
+      for (const d of drops) if (isFinite(d.life)) d.life -= dt;
+      for (const b of enemyBeams) b.t = Math.max(1e-3, b.t - dt);
+      for (const s2 of bloodSplats) s2.life = Math.max(0.05, s2.life - dt);
+      fx = fx.filter((f) => now - f.at < 4e3);
+    }
+    if (isMirror) {
+      opts.mirror.socket.on("c:snap", mirrorApply);
+      $("#lobby .eyebrow").textContent = "ONLINE SQUAD \xB7 ROOM " + opts.mirror.room;
+      $("#lobby h1").textContent = "Waiting for the host";
+      $("#lobby .lobby-card > p").textContent = "The host starts the match. You play with W A S D + mouse (click or Space to fire).";
+      $("#roomCode").textContent = opts.mirror.room;
+      net.server = "online";
+      startButton.textContent = "WAITING FOR HOST";
+      startButton.disabled = true;
+    }
+    if (netRec) {
+      $("#lobby .eyebrow").textContent = "ONLINE ROOM \xB7 UP TO " + ONLINE_MAX + " CHICKS";
+      $("#lobby h1").textContent = "Gather your squad";
+      $("#lobby .lobby-card > p").textContent = "Send the invite to up to " + (ONLINE_MAX - 1) + " friends. They open it on a computer and play with keyboard + mouse.";
+      const copy = $("#copyInvite");
+      if (copy)
+        copy.onclick = async () => {
+          const url = $("#joinUrl").textContent;
+          const text = "Join my Chicken Horde farm! \u{1F425} " + url;
+          try {
+            await navigator.clipboard.writeText(text);
+            toast("Invite copied \u2014 paste it in your chat");
+          } catch {
+            prompt("Copy this invite:", text);
+          }
+        };
+      setTimeout(() => {
+        if (!localConn) toggleLocalPlayer();
+      }, 600);
+    }
     window.__chickenHorde = {
       players,
       get enemies() {
@@ -2679,6 +3051,11 @@
         return enemies.length;
       },
       now: () => clock(),
+      netStats: () => netStats,
+      netMeasure: (key) => {
+        if (key) netForceKey = true;
+        return JSON.stringify(encodeSnapshot(clock())).length;
+      },
       get localPlayer() {
         return localPlayer();
       },
@@ -2746,7 +3123,14 @@
     lockMobileZoom();
     const status = $("#joinStatus"), connStatus = $("#connection");
     let move = { x: 0, y: 0 }, aim = 0, fire = false, joined = false;
-    let wasKicked = false;
+    let wasKicked = false, roomMode = "class", mirrorOn = false;
+    const canPlayOnline = () => {
+      try {
+        return matchMedia("(pointer:fine)").matches || !matchMedia("(pointer:coarse)").matches;
+      } catch {
+        return true;
+      }
+    };
     const clientKey = "chicken-horde-client-id";
     let clientId;
     try {
@@ -2775,12 +3159,16 @@
     }
     function onData(c, d) {
       if (c !== conn || !d) return;
-      if (d.type === "kicked") {
+      if (d.type === "kicked" || d.type === "full") {
         wasKicked = true;
         joined = false;
+        if (mirrorOn) {
+          $("#host").classList.add("hidden");
+          $("#controller").classList.remove("hidden");
+        }
         $("#joinPanel").classList.remove("hidden");
         $("#controls").classList.add("hidden");
-        status.textContent = "The host removed you from the lobby.";
+        status.textContent = d.type === "full" ? "This squad is full \u2014 online rooms take 6 chicks max." : "The host removed you from the lobby.";
         connStatus.textContent = "REMOVED";
       } else if (d.type === "state" && joined) updateBadge(d);
       else if (d.type === "gameOver") updateBadge({ hp: 0, started: false, over: true });
@@ -2797,16 +3185,27 @@
         if (!res || !res.ok) {
           conn.open = false;
           connStatus.textContent = "WAITING";
-          status.textContent = res && res.error === "no-room" ? "Room ".concat(roomId, " is not open \u2014 check the code or wait for the host\u2026") : res && res.error === "full" ? "This room is full." : "Trying to reach the host\u2026";
+          status.textContent = res && res.error === "no-room" ? "Room ".concat(roomId, " is not open \u2014 check the code or wait for the host\u2026") : res && res.error === "full" ? res.mode === "online" ? "This online squad is full (6 chicks max)." : "This room is full." : "Trying to reach the host\u2026";
           retryTimer = setTimeout(() => {
             if (socket.connected) joinRoom();
           }, 2500);
           return;
         }
         conn.open = true;
+        roomMode = res.mode === "online" ? "online" : "class";
+        document.body.classList.toggle("online-room", roomMode === "online");
+        if (roomMode === "online" && !joined) {
+          $("#joinPanel .eyebrow").textContent = "ONLINE ROOM \xB7 " + roomId;
+          $("#joinPanel h1").textContent = "Join the squad";
+          $("#joinBtn").textContent = "JOIN ONLINE GAME";
+        }
         connStatus.textContent = res.hostOnline === false ? "HOST AWAY" : "CONNECTED";
-        status.textContent = joined ? "Reconnected. Welcome back!" : "Connected to the farm.";
+        status.textContent = joined ? "Reconnected. Welcome back!" : roomMode === "online" ? "Online room \xB7 you will see the game on this screen and play with keyboard + mouse." : "Connected to the farm.";
         $("#joinBtn").disabled = false;
+        if (roomMode === "online" && !canPlayOnline()) {
+          $("#joinBtn").disabled = true;
+          status.textContent = "This is an ONLINE room \u2014 join it from a computer (keyboard + mouse). Phones work as controllers in classroom rooms.";
+        }
         if (joined) conn.send({ type: "join", clientId, name: currentName() });
       });
     }
@@ -2896,10 +3295,25 @@
       conn.send({ type: "join", clientId, name });
       joined = true;
       $("#playerName").blur();
+      if (roomMode === "online") {
+        startMirror(name);
+        return;
+      }
       $("#joinPanel").classList.add("hidden");
       $("#controls").classList.remove("hidden");
       updateBadge({ name, hp: 100, started: false });
     };
+    function startMirror(name) {
+      if (mirrorOn) return;
+      mirrorOn = true;
+      $("#controller").classList.add("hidden");
+      $("#host").classList.remove("hidden");
+      $("#assetLoadStatus").textContent = "Loading the farm\u2026";
+      import("./renderer3d.mjs?v=11.0.0").then(({ createGameRenderer }) => initHost(createGameRenderer, { online: true, mirror: { socket, conn, clientId, name, room: roomId } })).catch((error) => {
+        console.error(error);
+        $("#assetLoadStatus").textContent = "Could not start 3D rendering. Check your connection and reload.";
+      });
+    }
     function setupStick(zone, kind) {
       const base = zone.querySelector(".stick-base"), knob = zone.querySelector(".stick-knob");
       let pointer = null;
@@ -3039,7 +3453,12 @@
       }
       if (kbMode) fire = mouseFire || keyFire || arrows;
       else if (keyFire || arrows) fire = true;
-      if ((conn == null ? void 0 : conn.open) && joined) conn.send({ type: "input", move: { x: +move.x.toFixed(3), y: +move.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
+      if (mirrorOn) {
+        if ((conn == null ? void 0 : conn.open) && Date.now() - lastPing > 4e3) {
+          lastPing = Date.now();
+          conn.send({ type: "ping" });
+        }
+      } else if ((conn == null ? void 0 : conn.open) && joined) conn.send({ type: "input", move: { x: +move.x.toFixed(3), y: +move.y.toFixed(3) }, aim: +aim.toFixed(3), fire });
       else if ((conn == null ? void 0 : conn.open) && Date.now() - lastPing > 4e3) {
         lastPing = Date.now();
         conn.send({ type: "ping" });

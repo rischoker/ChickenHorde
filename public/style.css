@@ -104,3 +104,14 @@ kbd{display:inline-block;min-width:20px;padding:1px 5px;margin:0 1px;border-radi
 .hud{gap:12px;padding:0 16px}.stats{gap:16px}.hud-action{white-space:nowrap;padding:10px 11px}.hud .start{padding:12px 16px;white-space:nowrap}
 @media(max-width:1380px){.hud #musicVolumeLabel{display:none}.hud #musicVolume{width:70px}.hud .start{font-size:12px}}
 @media(max-width:1180px){.stats{gap:10px;font-size:9px}.brand small{display:none}}
+/* v11: online mode + installable app */
+body.mirror .host-only{display:none!important}
+body:not(.online-room) .online-only{display:none!important}
+body.online-room .class-only{display:none!important}
+body.mirror .kick-button{display:none!important}
+.mode-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px;margin:14px 0 6px}
+.mode-card{display:grid;gap:8px;padding:16px;border-radius:18px;text-decoration:none;color:#fff8de;background:linear-gradient(150deg,#f14e3e,#a8301f);box-shadow:0 5px 0 #7a2318;text-align:left;transition:transform .12s}
+.mode-card.online{background:linear-gradient(150deg,#3a8bd8,#1f4f9a);box-shadow:0 5px 0 #173a73}
+.mode-card:hover{transform:translateY(-2px)}.mode-card b{font-size:16px;letter-spacing:.04em}.mode-card span{font-size:10px;line-height:1.55;opacity:.92}
+.landing-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+#copyInvite{background:#1f4f9a;border-color:#8cc4ff;color:#e6f2ff}

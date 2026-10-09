@@ -16,7 +16,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://vjbcqhkfvctzwecmzcqa.supabase.co').replace(/\/+$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_mJlZ7Ym9LXAhTkWncksX6A_Czg0mbv6';
 const HOST_GRACE_MS = 3 * 60 * 1000;   // keep a room alive this long after the host screen drops
-const MAX_PLAYERS = 32;
+const MAX_PLAYERS = 32;          // classroom rooms (projector + phones)
+const MAX_ONLINE_SOCKETS = 12;   // online rooms: the host caps the squad at 6 chicks; this only stops socket spam
 const started = Date.now();
 
 const app = express();
@@ -65,7 +66,7 @@ app.post('/api/scores', async (req, res) => {
 // ---- Static game ----------------------------------------------------------------
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, file) {
-    if (/\.(html)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
+    if (/\.(html|webmanifest)$/.test(file) || /sw\.js$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
     else if (/\.(glb|gltf|bin|png|mp3|obj|mtl)$/.test(file)) res.setHeader('Cache-Control', 'public, max-age=604800');
     else res.setHeader('Cache-Control', 'public, max-age=3600');
   }
@@ -74,10 +75,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // ---- Rooms ---------------------------------------------------------------------
 const server = http.createServer(app);
 const io = new Server(server, {
-  pingInterval: 10000, pingTimeout: 12000, maxHttpBufferSize: 64 * 1024,
+  pingInterval: 10000, pingTimeout: 12000, maxHttpBufferSize: 512 * 1024,
   cors: { origin: true }
 });
-// code -> { code, token, hostId, clients: Map<sid, {socketId, clientId}>, hostGoneTimer }
+// code -> { code, token, mode, hostId, clients: Map<sid, {socketId, clientId}>, hostGoneTimer }
 const rooms = new Map();
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function newCode() { let c; do { c = Array.from(crypto.randomBytes(5), b => ALPHABET[b % ALPHABET.length]).join(''); } while (rooms.has(c)); return c; }
@@ -88,23 +89,24 @@ io.on('connection', socket => {
   socket.on('h:create', (msg, ack) => {
     if (typeof ack !== 'function') return;
     let room = msg && rooms.get(String(msg.room || '').toUpperCase());
+    const mode = msg && msg.mode === 'online' ? 'online' : 'class';
     if (room && room.token === msg.token) {
       clearTimeout(room.hostGoneTimer); room.hostGoneTimer = null;
-      room.hostId = socket.id;
+      room.hostId = socket.id; room.mode = mode;
     } else {
       // After a server restart the room no longer exists: give the host its old code back (if free)
       // so the phones that keep retrying that code can join again without scanning a new QR.
       const wanted = String(msg?.room || '').toUpperCase();
       const code = /^[A-Z0-9]{5}$/.test(wanted) && !rooms.has(wanted) ? wanted : newCode();
-      room = { code, token: crypto.randomBytes(16).toString('hex'), hostId: socket.id, clients: new Map(), hostGoneTimer: null };
+      room = { code, token: crypto.randomBytes(16).toString('hex'), mode, hostId: socket.id, clients: new Map(), hostGoneTimer: null };
       rooms.set(room.code, room);
     }
     socket.data.role = 'host'; socket.data.room = room.code;
     socket.join('host:' + room.code);
-    ack({ ok: true, room: room.code, token: room.token });
+    ack({ ok: true, room: room.code, token: room.token, mode: room.mode });
     // Phones that stayed connected while the host was away are re-announced and asked to re-join.
     for (const [sid, c] of room.clients) { socket.emit('h:open', { sid }); io.to(c.socketId).emit('c:rejoin'); }
-    console.log(`[room ${room.code}] host connected (${room.clients.size} phones)`);
+    console.log(`[room ${room.code}] ${room.mode} host connected (${room.clients.size} clients)`);
   });
 
   // Phone joins a room.
@@ -112,13 +114,17 @@ io.on('connection', socket => {
     if (typeof ack !== 'function') return;
     const room = rooms.get(String(msg?.room || '').toUpperCase().trim());
     if (!room) return ack({ ok: false, error: 'no-room' });
-    if (!room.clients.has(socket.id) && room.clients.size >= MAX_PLAYERS) return ack({ ok: false, error: 'full' });
+    const max = room.mode === 'online' ? MAX_ONLINE_SOCKETS : MAX_PLAYERS;
+    const clientIdIn = String(msg.clientId || '').slice(0, 80);
+    const returning = [...room.clients.values()].some(c => clientIdIn && c.clientId === clientIdIn);
+    if (!room.clients.has(socket.id) && !returning && room.clients.size >= max) return ack({ ok: false, error: 'full', mode: room.mode });
     // A phone that reconnects with the same clientId replaces its old socket.
     const clientId = String(msg.clientId || '').slice(0, 80);
     for (const [sid, c] of room.clients) if (clientId && c.clientId === clientId && sid !== socket.id) { room.clients.delete(sid); io.to(room.hostId).emit('h:close', { sid }); io.sockets.sockets.get(c.socketId)?.disconnect(true); }
     room.clients.set(socket.id, { socketId: socket.id, clientId });
     socket.data.role = 'client'; socket.data.room = room.code;
-    ack({ ok: true, hostOnline: !room.hostGoneTimer });
+    socket.join('room:' + room.code);
+    ack({ ok: true, hostOnline: !room.hostGoneTimer, mode: room.mode });
     if (!room.hostGoneTimer) io.to(room.hostId).emit('h:open', { sid: socket.id });
   });
 
@@ -132,6 +138,12 @@ io.on('connection', socket => {
     const room = rooms.get(socket.data.room);
     if (!room || room.hostId !== socket.id || !msg || !room.clients.has(msg.sid)) return;
     io.to(msg.sid).emit('c:d', msg.d);
+  });
+  // Online rooms: the host's browser runs the game and broadcasts compact snapshots to every guest screen.
+  socket.on('h:bc', d => {
+    const room = rooms.get(socket.data.room);
+    if (!room || room.hostId !== socket.id || room.mode !== 'online') return;
+    socket.to('room:' + room.code).emit('c:snap', d);
   });
   socket.on('h:kick', msg => {
     const room = rooms.get(socket.data.room);

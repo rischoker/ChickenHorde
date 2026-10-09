@@ -1,6 +1,14 @@
-# Chicken Horde V10 — Farm Defense (Express + Socket.IO en Render)
+# Chicken Horde V11 — Farm Defense (Express + Socket.IO en Render)
 
 La pantalla del proyector es el **host** (corre el juego 3D) y cada estudiante juega con su **celular como control**. Todo pasa por el propio servidor del juego en Render: no hay P2P ni CDNs, así que funciona detrás de los proxies de la academia mientras el dominio de Render esté permitido.
+
+## Novedades V11 — modo online + app instalable
+
+- **Dos modos desde la portada:**
+  - 🏫 **CLASSROOM** (`?host=1`): igual que siempre, proyector + celulares como control (hasta 32).
+  - 🌐 **PLAY ONLINE** (`?host=1&online=1`): el PC del anfitrión corre el juego, el anfitrión también juega (teclado + mouse) y copia la invitación. Los invitados abren el link en su computador y ven el juego en su propia pantalla. **Máximo 6 pollitos.** Los celulares no pueden entrar a salas online (se les explica por qué).
+- **Cómo funciona:** el navegador del anfitrión envía unas 12 fotos por segundo del estado (solo lo que cambió, comprimido) por el servidor de Render; cada invitado las dibuja con el mismo motor 3D y escucha los mismos sonidos. Si un invitado se cae, vuelve con su puntaje.
+- **App instalable (PWA):** `manifest.webmanifest`, íconos y `sw.js`. Chrome/Edge muestran "Instalar" y queda un ícono en el escritorio. Los modelos 3D y el audio quedan en caché (2.ª carga casi instantánea); el código siempre se actualiza solo desde Render.
 
 ## Novedades V10
 
