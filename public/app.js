@@ -11,11 +11,12 @@
       return this;
     }
     emit(t, ...a) {
-      for (const f of this.h[t] || []) try {
-        f(...a);
-      } catch (e) {
-        console.error(e);
-      }
+      for (const f of this.h[t] || [])
+        try {
+          f(...a);
+        } catch (e) {
+          console.error(e);
+        }
     }
   }
   function setupHowTo() {
@@ -25,11 +26,12 @@
       box.classList.remove("hidden");
       box.scrollTop = 0;
     }, close = () => box.classList.add("hidden");
-    for (const b of document.querySelectorAll(".howto-btn")) b.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.currentTarget.blur();
-      open();
-    });
+    for (const b of document.querySelectorAll(".howto-btn"))
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.currentTarget.blur();
+        open();
+      });
     box.addEventListener("click", (e) => {
       if (e.target === box || e.target.closest(".howto-close")) close();
     });
@@ -40,7 +42,7 @@
   setupHowTo();
   if (hostMode) {
     $("#host").classList.remove("hidden");
-    import("./renderer3d.mjs?v=9.0.0").then(({ createGameRenderer }) => initHost(createGameRenderer)).catch((error) => {
+    import("./renderer3d.mjs?v=10.0.0").then(({ createGameRenderer }) => initHost(createGameRenderer)).catch((error) => {
       console.error(error);
       $("#assetLoadStatus").textContent = "Could not start 3D rendering. Check your connection and reload.";
       $("#startBtn").disabled = true;
@@ -60,7 +62,7 @@
     let timeShift = 0, paused = false, godMode = false;
     const clock = () => performance.now() + timeShift;
     const canvas = $("#game"), lobby = $("#lobby"), roster = $("#roster"), players = /* @__PURE__ */ new Map();
-    let started = false, gameOver = false, wave = 0, farmHp = 100, shots = [], enemyBeams = [], fireballs = [], enemies = [], drops = [], last = performance.now(), spawn = 0, remainingToSpawn = 0, elitesToSpawn = [], spawnGroups = [], tornadoesThisWave = 0, countdown = 0, audio = null, soundOn = false, lastShotSound = 0, henLastHit = 0, lastHenCry = 0, bloodSplats = [], musicOn = false, musicStarted = false, laserWave = 0, waveGroups = 0, waveElites = 0, fx = [], fxId = 0, dropId = 0;
+    let started = false, gameOver = false, wave = 0, farmHp = 100, shots = [], carrots = [], enemyBeams = [], fireballs = [], enemies = [], drops = [], last = performance.now(), spawn = 0, remainingToSpawn = 0, elitesToSpawn = [], spawnGroups = [], tornadoesThisWave = 0, countdown = 0, audio = null, soundOn = false, lastShotSound = 0, henLastHit = 0, lastHenCry = 0, bloodSplats = [], musicOn = false, musicStarted = false, laserWave = 0, waveGroups = 0, waveElites = 0, fx = [], fxId = 0, dropId = 0;
     const reconnectGrace = 45e3, kickedIds = /* @__PURE__ */ new Set();
     const turret = { active: false, angle: Math.PI / 2, lastShot: 0, target: null, shotAt: 0 };
     let hulkWave = 0;
@@ -100,26 +102,73 @@
     function tree(x, y, s = 1) {
       if (free(x, y, 14)) addOb({ kind: "tree", x, y, radius: 14, s, seed: (x * 3 + y * 11) % 23, variant: Math.floor((x + y) / 37) % 3 });
     }
-    for (const [dx, dy] of [[-165, -130], [165, -130], [-165, 135], [165, 135]]) rock(H.x + dx, H.y + dy, 20, true);
-    for (const a of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]) hayRow(H.x + Math.cos(a) * 500, H.y + Math.sin(a) * 500 * 0.82, a + Math.PI / 2, 3);
+    for (const [dx, dy] of [
+      [-38, -32],
+      [38, -32],
+      [-38, 30],
+      [38, 30]
+    ])
+      addOb({ kind: "coop", x: H.x + dx, y: H.y + dy, radius: 40, low: true });
+    const COOP_REACH = 84;
+    for (const [dx, dy] of [
+      [-165, -130],
+      [165, -130],
+      [-165, 135],
+      [165, 135]
+    ])
+      rock(H.x + dx, H.y + dy, 20, true);
+    for (const a of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4])
+      hayRow(H.x + Math.cos(a) * 500, H.y + Math.sin(a) * 500 * 0.82, a + Math.PI / 2, 3);
     for (const side of [-1, 1]) {
       const cx = H.x + side * 585, cy = H.y - 20;
       rock(cx, cy - 70, 26);
       rock(cx + side * 22, cy + 8, 22);
       rock(cx - side * 8, cy + 82, 24);
     }
-    for (const [x, y, a] of [[H.x - 260, H.y - 470, 0.2], [H.x + 270, H.y - 460, -0.25], [H.x - 300, H.y + 420, -0.15], [H.x + 310, H.y + 410, 0.3]]) log(x, y, a);
-    for (const [x, y] of [[380, 380], [1420, 400], [400, 880], [1410, 860], [700, 300], [1100, 290], [560, 640], [1250, 700]]) tree(x, y, 0.85 + (x + y) % 5 * 0.08);
-    for (const [x, y, r] of [[520, 560, 18], [1290, 560, 17], [760, 980, 16], [1050, 990, 18], [640, 240, 15], [1170, 220, 16]]) rock(x, y, r);
+    for (const [x, y, a] of [
+      [H.x - 260, H.y - 470, 0.2],
+      [H.x + 270, H.y - 460, -0.25],
+      [H.x - 300, H.y + 420, -0.15],
+      [H.x + 310, H.y + 410, 0.3]
+    ])
+      log(x, y, a);
+    for (const [x, y] of [
+      [380, 380],
+      [1420, 400],
+      [400, 880],
+      [1410, 860],
+      [700, 300],
+      [1100, 290],
+      [560, 640],
+      [1250, 700]
+    ])
+      tree(x, y, 0.85 + (x + y) % 5 * 0.08);
+    for (const [x, y, r] of [
+      [520, 560, 18],
+      [1290, 560, 17],
+      [760, 980, 16],
+      [1050, 990, 18],
+      [640, 240, 15],
+      [1170, 220, 16]
+    ])
+      rock(x, y, r);
     for (let i = 0; i < 70; i++) {
       const x = (97 + i * 263) % world.w, y = (61 + i * 389) % world.h;
-      if (Math.hypot(x - H.x, y - H.y) > 200 && free(x, y, 8)) decor.push({ kind: i % 5 === 0 ? "pumpkin" : i % 3 === 0 ? "mushroom" : "flowers", x, y, seed: i });
+      if (Math.hypot(x - H.x, y - H.y) > 200 && free(x, y, 8))
+        decor.push({ kind: i % 5 === 0 ? "pumpkin" : i % 3 === 0 ? "mushroom" : "flowers", x, y, seed: i });
     }
-    for (const [dx, dy] of [[-120, 40], [120, 40], [-95, -60], [105, -55]]) decor.push({ kind: "pumpkin", x: H.x + dx, y: H.y + dy, seed: dx + dy });
+    for (const [dx, dy] of [
+      [-120, 40],
+      [120, 40],
+      [-95, -60],
+      [105, -55]
+    ])
+      decor.push({ kind: "pumpkin", x: H.x + dx, y: H.y + dy, seed: dx + dy });
     const grassTufts = [];
     for (let i = 0; i < 420; i++) {
       const x = (100 + i * 617 % 3400) * 0.5, y = (100 + i * 353 % 2200) * 0.5;
-      if (Math.hypot(x - H.x, y - H.y) > 175 && !trees.some((t) => Math.hypot(t.x - x, t.y - y) < t.radius + 14)) grassTufts.push({ x, y, s: (34 + i * 13 % 24) * 0.5, r: i * 1.71 % 6.28 });
+      if (Math.hypot(x - H.x, y - H.y) > 175 && !trees.some((t) => Math.hypot(t.x - x, t.y - y) < t.radius + 14))
+        grassTufts.push({ x, y, s: (34 + i * 13 % 24) * 0.5, r: i * 1.71 % 6.28 });
     }
     for (const t of trees) {
       const key = Math.floor(t.x / obstacleCell) + "," + Math.floor(t.y / obstacleCell), bucket = obstacleGrid.get(key) || [];
@@ -133,7 +182,19 @@
       if (!force && now - (p.lastSend || 0) < 90) return;
       p.lastSend = now;
       try {
-        if ((_a = p.conn) == null ? void 0 : _a.open) p.conn.send({ type: "state", started, hp: Math.ceil(p.effects.HULK ? p.hulkHp : p.hp), color: p.color, name: p.name, revive: +(p.revive || 0).toFixed(2), laser: !!p.effects.LASER, seeker: !!p.effects.SEEKER, hulk: !!p.effects.HULK, wave });
+        if ((_a = p.conn) == null ? void 0 : _a.open)
+          p.conn.send({
+            type: "state",
+            started,
+            hp: Math.ceil(p.effects.HULK ? p.hulkHp : p.hp),
+            color: p.color,
+            name: p.name,
+            revive: +(p.revive || 0).toFixed(2),
+            laser: !!p.effects.LASER,
+            seeker: !!p.effects.SEEKER,
+            hulk: !!p.effects.HULK,
+            wave
+          });
       } catch {
       }
     }
@@ -271,7 +332,9 @@
       }
     }
     function tableHtml(list, global) {
-      return list.length ? '<table class="score-table"><thead><tr><th>#</th><th>PLAYER</th><th>BEST</th><th>WAVE</th></tr></thead><tbody>' + list.map((s, i) => "<tr".concat(i < 3 ? ' class="top'.concat(i + 1, '"') : "", "><td>").concat(["\u{1F947}", "\u{1F948}", "\u{1F949}"][i] || i + 1, "</td><td>").concat(escapeText(s.name), "</td><td>").concat(s.score, "</td><td>").concat(s.wave, "</td></tr>")).join("") + "</tbody></table>" : '<p class="empty-scores">'.concat(global ? "No global scores yet \u2014 be the first!" : "No scores yet. Start a game!", "</p>");
+      return list.length ? '<table class="score-table"><thead><tr><th>#</th><th>PLAYER</th><th>BEST</th><th>WAVE</th></tr></thead><tbody>' + list.map(
+        (s, i) => "<tr".concat(i < 3 ? ' class="top'.concat(i + 1, '"') : "", "><td>").concat(["\u{1F947}", "\u{1F948}", "\u{1F949}"][i] || i + 1, "</td><td>").concat(escapeText(s.name), "</td><td>").concat(s.score, "</td><td>").concat(s.wave, "</td></tr>")
+      ).join("") + "</tbody></table>" : '<p class="empty-scores">'.concat(global ? "No global scores yet \u2014 be the first!" : "No scores yet. Start a game!", "</p>");
     }
     async function renderBoard(id) {
       const target = $("#" + id);
@@ -296,12 +359,14 @@
         note.textContent = "Global leaderboard unavailable \u2014 showing this PC";
       }
     }
-    document.querySelectorAll(".board-tabs").forEach((t) => t.addEventListener("click", (e) => {
-      const b = e.target.closest("button");
-      if (!b || b.disabled) return;
-      boardMode[t.dataset.board] = b.dataset.mode;
-      renderBoard(t.dataset.board);
-    }));
+    document.querySelectorAll(".board-tabs").forEach(
+      (t) => t.addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b || b.disabled) return;
+        boardMode[t.dataset.board] = b.dataset.mode;
+        renderBoard(t.dataset.board);
+      })
+    );
     function refreshScoreboards() {
       renderBoard("lobbyScores");
       renderBoard("finalScores");
@@ -330,7 +395,16 @@
       $("#runScores").innerHTML = '<table class="score-table"><thead><tr><th>PLAYER</th><th>SCORE</th><th>KILLS</th></tr></thead><tbody>' + [...players.values()].sort((a, b) => b.score - a.score).map((p) => "<tr><td>".concat(escapeText(p.name), "</td><td>").concat(p.score, "</td><td>").concat(p.kills, "</td></tr>")).join("") + "</tbody></table>";
       refreshScoreboards();
       $("#gameOver").classList.remove("hidden");
-      submitGlobal([...players.values()].filter((p) => p.score > 0).map((p) => ({ name: p.name.slice(0, 12), score: Math.floor(p.score), wave: Math.max(1, wave), kills: p.kills, players: Math.max(1, players.size), version: "9.0" })));
+      submitGlobal(
+        [...players.values()].filter((p) => p.score > 0).map((p) => ({
+          name: p.name.slice(0, 12),
+          score: Math.floor(p.score),
+          wave: Math.max(1, wave),
+          kills: p.kills,
+          players: Math.max(1, players.size),
+          version: "10.0"
+        }))
+      );
     }
     function screenVectorToWorld(x, y) {
       return { x, y: y / 0.82 };
@@ -343,7 +417,9 @@
       s /= 100;
       l /= 100;
       const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-      return "#" + [f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+      return "#" + [f(0), f(8), f(4)].map(
+        (v) => Math.round(v * 255).toString(16).padStart(2, "0")
+      ).join("");
     }
     function choosePlayerColor() {
       const used = [...players.values()].map((p) => p.hue).filter((h) => h != null);
@@ -376,7 +452,27 @@
       const name = String(msg.name || "CHICK").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 12) || "CHICK";
       if (!p) {
         const n = players.size, c = choosePlayerColor();
-        p = { id: clientId, clientId, name, x: H.x - 75 + n % 4 * 50, y: H.y + 190 + Math.floor(n / 4) * 38, aim: 0, move: { x: 0, y: 0 }, fire: false, hp: 100, effects: {}, score: 0, kills: 0, lastHit: 0, conn: null, connected: false, color: c.color, hue: c.hue, revive: 0, joinedAt: clock() };
+        p = {
+          id: clientId,
+          clientId,
+          name,
+          x: H.x - 75 + n % 4 * 50,
+          y: H.y + 190 + Math.floor(n / 4) * 38,
+          aim: 0,
+          move: { x: 0, y: 0 },
+          fire: false,
+          hp: 100,
+          effects: {},
+          score: 0,
+          kills: 0,
+          lastHit: 0,
+          conn: null,
+          connected: false,
+          color: c.color,
+          hue: c.hue,
+          revive: 0,
+          joinedAt: clock()
+        };
         players.set(p.id, p);
         if (!started) pushFx("join", p.x, p.y, { playerId: p.id });
       } else p.name = name;
@@ -401,7 +497,8 @@
     function updateNet() {
       const label = { online: "\u2713 ONLINE", connecting: "\u2026 CONNECTING", reconnecting: "\u21BB RECONNECTING" }[net.server] || net.server;
       const el = $("#netStatus");
-      if (el) el.innerHTML = '<span class="net-'.concat(net.server, '">SERVER ').concat(label, '</span><span class="net-online">\u{1F4F1} ').concat(conns.size, " PHONE").concat(conns.size === 1 ? "" : "S", "</span>");
+      if (el)
+        el.innerHTML = '<span class="net-'.concat(net.server, '">SERVER ').concat(label, '</span><span class="net-online">\u{1F4F1} ').concat(conns.size, " PHONE").concat(conns.size === 1 ? "" : "S", "</span>");
       const sig = net.server;
       if (sig === updateNet.last) return;
       updateNet.last = sig;
@@ -524,6 +621,7 @@
       farmHp = 100;
       wave = 0;
       shots = [];
+      carrots = [];
       enemyBeams = [];
       fireballs = [];
       enemies = [];
@@ -631,7 +729,10 @@
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
-        for (const [at, f] of [[0, 2600], [0.13, 2900]]) {
+        for (const [at, f] of [
+          [0, 2600],
+          [0.13, 2900]
+        ]) {
           const o = audio.createOscillator(), g = audio.createGain();
           o.type = "triangle";
           o.frequency.setValueAtTime(f, now + at);
@@ -759,10 +860,12 @@
     };
     function collidesTree(x, y, r, shot = false) {
       const gx = Math.floor(x / obstacleCell), gy = Math.floor(y / obstacleCell), reach = Math.ceil((r + 90) / obstacleCell);
-      for (let cx = gx - reach; cx <= gx + reach; cx++) for (let cy = gy - reach; cy <= gy + reach; cy++) for (const t of obstacleGrid.get(cx + "," + cy) || []) {
-        if (shot && t.low) continue;
-        if (Math.hypot(x - t.x, y - t.y) < (t.radius || t.s) + r + (shot ? 0 : 6)) return true;
-      }
+      for (let cx = gx - reach; cx <= gx + reach; cx++)
+        for (let cy = gy - reach; cy <= gy + reach; cy++)
+          for (const t of obstacleGrid.get(cx + "," + cy) || []) {
+            if (shot && t.low) continue;
+            if (Math.hypot(x - t.x, y - t.y) < (t.radius || t.s) + r + (shot ? 0 : 6)) return true;
+          }
       return false;
     }
     function pathBlocked(x, y, nx, ny, r, shot = false) {
@@ -844,11 +947,33 @@
     }
     function nearbyEnemies(e, radius) {
       const out = [], gx = Math.floor(e.x / 240), gy = Math.floor(e.y / 240), reach = Math.ceil(radius / 240);
-      for (let x = gx - reach; x <= gx + reach; x++) for (let y = gy - reach; y <= gy + reach; y++) for (const o of enemyGrid.get(x + "," + y) || []) if (o !== e && Math.hypot(o.x - e.x, o.y - e.y) < radius) out.push(o);
+      for (let x = gx - reach; x <= gx + reach; x++)
+        for (let y = gy - reach; y <= gy + reach; y++)
+          for (const o of enemyGrid.get(x + "," + y) || []) if (o !== e && Math.hypot(o.x - e.x, o.y - e.y) < radius) out.push(o);
       return out;
     }
-    const dropTypes = { SHIELD: "SHIELD", MEDKIT: "MEDKIT", DOUBLE: "DOUBLE SHOT", RAPID: "RAPID FIRE", TURRET: "CHICKEN TURRET", LASER: "CHICKEN LASER", SEEKER: "CHICKEN SEEKER", HULK: "CHICKEN HULK" };
-    const pickupSounds = { SHIELD: new Audio("./assets/audio/powerup-shield.mp3"), DOUBLE: new Audio("./assets/audio/powerup-double-shot.mp3"), RAPID: new Audio("./assets/audio/powerup-rapid-fire.mp3"), LASER: new Audio("./assets/audio/powerup-laser.mp3"), TURRET: new Audio("./assets/audio/powerup-turret.mp3"), MEDKIT: new Audio("./assets/audio/powerup-medkit.mp3"), NEXTWAVE: new Audio("./assets/audio/next-wave.mp3"), SUPER: new Audio("./assets/audio/super-chicken.mp3"), SEEKER: new Audio("./assets/audio/powerup-seeker.mp3"), HULK: new Audio("./assets/audio/powerup-hulk.mp3") };
+    const dropTypes = {
+      SHIELD: "SHIELD",
+      MEDKIT: "MEDKIT",
+      DOUBLE: "DOUBLE SHOT",
+      RAPID: "RAPID FIRE",
+      TURRET: "CHICKEN TURRET",
+      LASER: "CHICKEN LASER",
+      SEEKER: "CHICKEN SEEKER",
+      HULK: "CHICKEN HULK"
+    };
+    const pickupSounds = {
+      SHIELD: new Audio("./assets/audio/powerup-shield.mp3"),
+      DOUBLE: new Audio("./assets/audio/powerup-double-shot.mp3"),
+      RAPID: new Audio("./assets/audio/powerup-rapid-fire.mp3"),
+      LASER: new Audio("./assets/audio/powerup-laser.mp3"),
+      TURRET: new Audio("./assets/audio/powerup-turret.mp3"),
+      MEDKIT: new Audio("./assets/audio/powerup-medkit.mp3"),
+      NEXTWAVE: new Audio("./assets/audio/next-wave.mp3"),
+      SUPER: new Audio("./assets/audio/super-chicken.mp3"),
+      SEEKER: new Audio("./assets/audio/powerup-seeker.mp3"),
+      HULK: new Audio("./assets/audio/powerup-hulk.mp3")
+    };
     const voiceSrc = { SMASH: "./assets/audio/hulk-smash.mp3" };
     function playVoice(k) {
       if (!soundOn) return;
@@ -889,8 +1014,28 @@
       } catch {
       }
     }
-    const ELITE_NAMES = { BOSS: "CHUPACABRAS", MUSHROOM: "MUSHROOM KING", ALIENBOSS: "ALIEN OVERLORD" };
-    const TAUNTS = { BOSS: ["GRRR... CHICKEN DINNER!", "I SMELL EGGS!", "NOBODY ESCAPES THE CHUPACABRAS!", "FEATHERS FOR BREAKFAST!", "HERE I COME!"], MUSHROOM: ["BOW TO THE FUNGUS KING!", "SPREAD THE SPORES!", "MY KINGDOM GROWS!", "MUSH... MUSH... CRUSH!", "ARISE, MY SPORELINGS!"], ALIENBOSS: ["RESISTANCE IS FUTILE, EARTHLINGS.", "TAKE ME TO YOUR HEN.", "PROBING SEQUENCE INITIATED.", "WHICH ONE IS REAL? HA HA HA!", "SHIELDS UP, PUNY CHICKENS."] };
+    const ELITE_NAMES = { BOSS: "CHUPACABRAS", MUSHROOM: "MUSHROOM KING", ALIENBOSS: "ALIEN OVERLORD", FIRELORD: "FIRE LORD", RABBIT: "CRAZY RABBIT" };
+    const TAUNTS = {
+      BOSS: ["GRRR... CHICKEN DINNER!", "I SMELL EGGS!", "NOBODY ESCAPES THE CHUPACABRAS!", "FEATHERS FOR BREAKFAST!", "HERE I COME!"],
+      MUSHROOM: ["BOW TO THE FUNGUS KING!", "SPREAD THE SPORES!", "MY KINGDOM GROWS!", "MUSH... MUSH... CRUSH!", "ARISE, MY SPORELINGS!"],
+      ALIENBOSS: [
+        "RESISTANCE IS FUTILE, EARTHLINGS.",
+        "TAKE ME TO YOUR HEN.",
+        "PROBING SEQUENCE INITIATED.",
+        "WHICH ONE IS REAL? HA HA HA!",
+        "SHIELDS UP, PUNY CHICKENS."
+      ],
+      FIRELORD: ["YOU CANNOT SEE ME... BUT I SEE THE HEN.", "BURN, LITTLE FEATHERS!", "SILENCE BEFORE THE SCREAM...", "MAMA HEN WILL ROAST!"],
+      RABBIT: ["CATCH ME IF YOU CAN! HEHEHE!", "SPECIAL DELIVERY! CARROTS!", "TOO SLOW, CHICKENS!", "BOOM-BOOM CARROTS!", "ZOOOOM!"]
+    };
+    const playerCount = () => Math.max(1, [...players.values()].filter((p) => p.connected).length || players.size);
+    const bossHpScale = () => 1 + (playerCount() - 1) * 0.32;
+    function raiseShield(e, now, dur, red, perPlayer) {
+      e.shieldUntil = now + dur;
+      e.shieldRed = red;
+      e.shieldHp = e.shieldMax = perPlayer ? perPlayer * playerCount() : null;
+      pushFx("shieldUp", e.x, e.y, { type: e.type });
+    }
     function say(e, text, now) {
       e.say = { text, at: now };
     }
@@ -898,7 +1043,7 @@
       const cd = $("#countdown");
       if (!cd) return;
       cd.dataset.v = "";
-      cd.innerHTML = "WAVE ".concat(wave, "<small>").concat(wave === 5 ? "CHUPACABRAS \u2014 it drops the CHICKEN TURRET" : wave >= 10 ? "MUSHROOM KING + ALIEN OVERLORD" : wave >= 8 ? "MUSHROOM KING INCOMING" : wave >= 6 ? "1 CHICKEN LASER hidden in this wave" : "DEFEND MAMA HEN!", "</small>");
+      cd.innerHTML = "WAVE ".concat(wave, "<small>").concat(wave === 5 ? "CHUPACABRAS \u2014 it drops the CHICKEN TURRET" : wave >= 13 ? "FIRE LORD + CRAZY RABBIT + MORE" : wave >= 11 ? "BEWARE THE INVISIBLE FIRE LORD" : wave >= 10 ? "MUSHROOM KING + ALIEN OVERLORD" : wave >= 8 ? "MUSHROOM KING INCOMING" : wave >= 6 ? "1 CHICKEN LASER hidden in this wave" : "DEFEND MAMA HEN!", "</small>");
       cd.classList.remove("pop");
       void cd.offsetWidth;
       cd.classList.add("show", "banner");
@@ -926,12 +1071,13 @@
       superChicken.boomed = true;
       pushFx("superBoom", superChicken.x, superChicken.y);
       let n = 0;
-      for (const e of enemies) if (e.hp > 0) {
-        e.hp = 0;
-        n++;
-        bloodSplats.push({ x: e.x, y: e.y, life: 7, size: 14, seed: Math.random() * 1e3, elite: !!e.elite });
-        if (e.elite) pushFx("eliteDeath", e.x, e.y, { type: e.type });
-      }
+      for (const e of enemies)
+        if (e.hp > 0) {
+          e.hp = 0;
+          n++;
+          bloodSplats.push({ x: e.x, y: e.y, life: 7, size: 14, seed: Math.random() * 1e3, elite: !!e.elite });
+          if (e.elite) pushFx("eliteDeath", e.x, e.y, { type: e.type });
+        }
       fireballs = [];
       enemyBeams = [];
       sweep(120, 30, 1.2, "sawtooth", 0.12);
@@ -973,6 +1119,8 @@
       if (wave === 5) elitesToSpawn.push("BOSS");
       if (wave >= 8) elitesToSpawn.push("MUSHROOM");
       if (wave >= 10) elitesToSpawn.push("ALIENBOSS");
+      if (wave >= 11) elitesToSpawn.push("FIRELORD");
+      if (wave >= 13) elitesToSpawn.push("RABBIT");
       remainingToSpawn = spawnGroups.reduce((sum, n) => sum + n, 0) + elitesToSpawn.length;
       waveGroups = spawnGroups.length;
       waveElites = elitesToSpawn.length;
@@ -996,18 +1144,86 @@
     }
     function makeEnemy(type, x, y, p, now) {
       const difficulty = 1 + (wave - 1) * 0.11, speedScale = 1.3 * 0.87 * 0.85;
-      let stats = { type, x, y, hitAt: 0, phase: Math.random() * 6.28, side: Math.random() < 0.5 ? -1 : 1, targetId: null, nextAbility: now + 2400 + Math.random() * 2200, nextFire: now + 1800 + Math.random() * 1e3, dashUntil: 0, jumpUntil: 0, bornAt: now };
-      if (type === "WOLF") Object.assign(stats, { hp: Math.ceil(8 * difficulty), speed: 34 * speedScale, damage: 12 + Math.floor(p * 0.45), r: 30, icon: "\u{1F43A}" });
-      else if (type === "EAGLE") Object.assign(stats, { hp: Math.ceil(3 * difficulty), speed: 85 * speedScale, damage: 3 + Math.floor(p * 0.18), r: 19, icon: "\u{1F985}" });
-      else if (type === "SNAKE") Object.assign(stats, { hp: Math.max(1, Math.ceil(2 * difficulty)), speed: 125 * speedScale, damage: 3 + Math.floor(p * 0.12), r: 17, icon: "\u{1F40D}" });
-      else if (type === "MOLE") Object.assign(stats, { hp: Math.ceil(5 * difficulty), speed: 46 * speedScale, damage: 7 + Math.floor(p * 0.2), r: 23, icon: "\u{1F439}", burrowUntil: 0, emergeAt: now + 1700 + Math.random() * 500, nextAbility: now + 4600 });
-      else if (type === "TORNADO") Object.assign(stats, { hp: Math.ceil(10 * difficulty), speed: 240 * speedScale, damage: 9 + Math.floor(p * 0.3), r: 29, icon: "\u{1F32A}\uFE0F", launchAt: now + 1500, travelAngle: Math.atan2(H.y - y, H.x - x), visualScale: 0.35 });
-      else if (type === "ALIEN") Object.assign(stats, { hp: Math.ceil(5 * difficulty), speed: 27 * speedScale, damage: 5 + Math.floor(p * 0.2), r: 24, icon: "\u{1F47D}" });
-      else if (type === "MAGE") Object.assign(stats, { hp: Math.ceil(6 * difficulty), speed: 42 * speedScale, damage: 7 + Math.floor(p * 0.25), r: 23, icon: "\u{1F9D9}" });
-      else if (type === "GHOST") Object.assign(stats, { hp: Math.ceil(4 * difficulty), speed: 52 * speedScale, damage: 8 + Math.floor(p * 0.25), r: 25, icon: "\u{1F47B}" });
-      else if (type === "PLANT") Object.assign(stats, { hp: Math.ceil(10 * difficulty), speed: 0, damage: (5 + Math.floor(p * 0.2)) * 0.9, r: 27, icon: "\u{1F331}", emergeAt: now + 1900 + Math.random() * 500 });
-      else if (type === "FOX") Object.assign(stats, { hp: Math.ceil(3 * difficulty), speed: 53 * speedScale, damage: 5 + Math.floor(p * 0.25), r: 23, icon: "\u{1F98A}" });
-      else if (type === "MECHAFROG") Object.assign(stats, { hp: Math.ceil(16 * difficulty), speed: 30 * speedScale, damage: 9 + Math.floor(p * 0.3), r: 30, icon: "\u{1F438}", nextAbility: now + 3e3 + Math.random() * 2e3, nextFire: now + 2500 + Math.random() * 1500 });
+      let stats = {
+        type,
+        x,
+        y,
+        hitAt: 0,
+        phase: Math.random() * 6.28,
+        side: Math.random() < 0.5 ? -1 : 1,
+        targetId: null,
+        nextAbility: now + 2400 + Math.random() * 2200,
+        nextFire: now + 1800 + Math.random() * 1e3,
+        dashUntil: 0,
+        jumpUntil: 0,
+        bornAt: now
+      };
+      if (type === "WOLF")
+        Object.assign(stats, { hp: Math.ceil(8 * difficulty), speed: 34 * speedScale, damage: 12 + Math.floor(p * 0.45), r: 30, icon: "\u{1F43A}" });
+      else if (type === "EAGLE")
+        Object.assign(stats, { hp: Math.ceil(3 * difficulty), speed: 85 * speedScale, damage: 3 + Math.floor(p * 0.18), r: 19, icon: "\u{1F985}" });
+      else if (type === "SNAKE")
+        Object.assign(stats, { hp: Math.max(1, Math.ceil(2 * difficulty)), speed: 125 * speedScale, damage: 3 + Math.floor(p * 0.12), r: 17, icon: "\u{1F40D}" });
+      else if (type === "MOLE")
+        Object.assign(stats, {
+          hp: Math.ceil(5 * difficulty),
+          speed: 46 * speedScale,
+          damage: 7 + Math.floor(p * 0.2),
+          r: 23,
+          icon: "\u{1F439}",
+          burrowUntil: 0,
+          emergeAt: now + 1700 + Math.random() * 500,
+          nextAbility: now + 4600
+        });
+      else if (type === "TORNADO")
+        Object.assign(stats, {
+          hp: Math.ceil(10 * difficulty),
+          speed: 240 * speedScale,
+          damage: 9 + Math.floor(p * 0.3),
+          r: 29,
+          icon: "\u{1F32A}\uFE0F",
+          launchAt: now + 1500,
+          travelAngle: Math.atan2(H.y - y, H.x - x),
+          visualScale: 0.35
+        });
+      else if (type === "ALIEN")
+        Object.assign(stats, { hp: Math.ceil(5 * difficulty), speed: 27 * speedScale, damage: 5 + Math.floor(p * 0.2), r: 24, icon: "\u{1F47D}" });
+      else if (type === "MAGE")
+        Object.assign(stats, { hp: Math.ceil(6 * difficulty), speed: 42 * speedScale, damage: 7 + Math.floor(p * 0.25), r: 23, icon: "\u{1F9D9}" });
+      else if (type === "GHOST")
+        Object.assign(stats, {
+          hp: Math.ceil(4 * difficulty),
+          speed: 52 * speedScale,
+          damage: 8 + Math.floor(p * 0.25),
+          r: 25,
+          icon: "\u{1F47B}",
+          nextEthereal: now + 1800 + Math.random() * 2500
+        });
+      else if (type === "PLANT")
+        Object.assign(stats, {
+          hp: Math.ceil(10 * difficulty),
+          speed: 0,
+          damage: (5 + Math.floor(p * 0.2)) * 0.9,
+          r: 27,
+          icon: "\u{1F331}",
+          emergeAt: now + 1900 + Math.random() * 500
+        });
+      else if (type === "FOX")
+        Object.assign(stats, { hp: Math.ceil(3 * difficulty), speed: 53 * speedScale, damage: 5 + Math.floor(p * 0.25), r: 23, icon: "\u{1F98A}" });
+      else if (type === "MECHAFROG")
+        Object.assign(stats, {
+          hp: Math.ceil(22 * difficulty),
+          speed: 30 * speedScale,
+          shieldUntil: now + 6e3,
+          shieldRed: 0.35,
+          shieldHp: 10,
+          shieldMax: 10,
+          damage: 9 + Math.floor(p * 0.3),
+          r: 30,
+          icon: "\u{1F438}",
+          nextAbility: now + 3e3 + Math.random() * 2e3,
+          nextFire: now + 2500 + Math.random() * 1500
+        });
       else if (type === "MUSHNUB") Object.assign(stats, { hp: 1, speed: 240 * speedScale, damage: 12, r: 15, icon: "\u{1F344}", nextAbility: now + 99999 });
       stats.damage = (stats.damage || 1) * 0.4;
       if (type === "TORNADO") {
@@ -1025,32 +1241,94 @@
       return findSpawnPosition(radius);
     }
     function makeElite(type, x, y, p, now) {
-      const speed = 27 * 1.3 * 0.87 * 0.85, base = { x, y, type, elite: true, name: ELITE_NAMES[type], hitAt: 0, phase: Math.random() * 6.28, side: 1, targetId: null, nextAbility: now + 2600, nextFire: now + 1500, dashUntil: 0, jumpUntil: 0, bornAt: now };
+      const speed = 27 * 1.3 * 0.87 * 0.85, base = {
+        x,
+        y,
+        type,
+        elite: true,
+        name: ELITE_NAMES[type],
+        hitAt: 0,
+        phase: Math.random() * 6.28,
+        side: 1,
+        targetId: null,
+        nextAbility: now + 2600,
+        nextFire: now + 1500,
+        dashUntil: 0,
+        jumpUntil: 0,
+        bornAt: now
+      };
       if (type === "MUSHROOM") {
-        const hp2 = Math.ceil(190 * (1 + p * 0.1));
-        return Object.assign(base, { hp: hp2, maxHp: hp2, speed: speed * 0.82, damage: (22 + Math.floor(p * 0.6)) * 0.4, r: 44, icon: "\u{1F344}", nextAbility: now + 3200 });
+        const hp2 = Math.ceil(190 * (1 + p * 0.1) * 2 * bossHpScale());
+        return Object.assign(base, {
+          hp: hp2,
+          maxHp: hp2,
+          bars: 2,
+          resist: 0.6,
+          speed: speed * 0.82,
+          damage: (22 + Math.floor(p * 0.6)) * 0.4,
+          r: 44,
+          icon: "\u{1F344}",
+          nextAbility: now + 3200
+        });
       }
       if (type === "ALIENBOSS") {
-        const hp2 = Math.ceil(165 * (1 + p * 0.1));
-        return Object.assign(base, { hp: hp2, maxHp: hp2, speed: speed * 1.1, damage: (18 + Math.floor(p * 0.5)) * 0.4, r: 40, icon: "\u{1F47D}", nextAbility: now + 5200, nextFire: now + 2200 });
+        const hp2 = Math.ceil(165 * (1 + p * 0.1) * 2 * bossHpScale());
+        return Object.assign(base, {
+          hp: hp2,
+          maxHp: hp2,
+          bars: 2,
+          resist: 0.6,
+          speed: speed * 1.1,
+          damage: (18 + Math.floor(p * 0.5)) * 0.4,
+          r: 40,
+          icon: "\u{1F47D}",
+          nextAbility: now + 5200,
+          nextFire: now + 2200
+        });
+      }
+      if (type === "FIRELORD") {
+        const hp2 = Math.ceil(40 * (1 + p * 0.08) * (1 + (playerCount() - 1) * 0.15));
+        return Object.assign(base, { hp: hp2, maxHp: hp2, speed: speed * 1.5, damage: 4, r: 34, icon: "\u{1F608}", revealUntil: 0, nextScream: now + 4e3 });
+      }
+      if (type === "RABBIT") {
+        const hp2 = Math.ceil(80 * (1 + p * 0.09) * (1 + (playerCount() - 1) * 0.25));
+        return Object.assign(base, { hp: hp2, maxHp: hp2, speed: 360, damage: 0, r: 28, icon: "\u{1F430}", mode: "in", modeUntil: 0, goal: null });
       }
       const hp = Math.ceil(115 * (1 + p * 0.11));
-      return Object.assign(base, { type: "BOSS", hp, maxHp: hp, speed, damage: (24 + Math.floor(p * 0.7)) * 0.4, r: 46, icon: "\u{1F479}", nextAbility: now + 2200, nextFire: now + 1300 });
+      return Object.assign(base, {
+        type: "BOSS",
+        hp,
+        maxHp: hp,
+        speed,
+        damage: (24 + Math.floor(p * 0.7)) * 0.4,
+        r: 46,
+        icon: "\u{1F479}",
+        nextAbility: now + 2200,
+        nextFire: now + 1300
+      });
     }
     function spawnElite(type, now) {
       const p = wave - 1, { x, y } = findSpawnPosition(46), e = makeElite(type, x, y, p, now);
       if (type === "BOSS" && wave === 5 && !turret.active) e.turretDrop = true;
       if (type === "MUSHROOM" && wave >= 8 && (wave - 8) % 5 === 0) e.seekerDrop = true;
-      e.spawnUntil = now + (type === "BOSS" ? 1300 : 2300);
+      e.spawnUntil = now + (type === "BOSS" || type === "RABBIT" || type === "FIRELORD" ? 1300 : 2300);
       e.spawnAt = now;
       e.nextAbility = Math.max(e.nextAbility, e.spawnUntil + 1500);
       e.nextFire = Math.max(e.nextFire, e.spawnUntil + 800);
       if (type === "ALIENBOSS") {
         e.nextIllusion = e.spawnUntil + 6e3;
-        e.nextShield = e.spawnUntil + 9e3;
+        e.nextShield = e.spawnUntil + 15e3 + 12e3;
         e.nextBlink = e.spawnUntil + 3500;
       }
-      if (type === "MUSHROOM") e.nextSpores = e.spawnUntil + 5e3;
+      if (type === "ALIENBOSS" || type === "MUSHROOM") {
+        raiseShield(e, e.spawnUntil, 15e3, type === "ALIENBOSS" ? 0.75 : 0.7, 30);
+        e.shieldUntil = e.spawnUntil + 15e3;
+      }
+      if (type === "MUSHROOM") {
+        e.nextSpores = e.spawnUntil + 250;
+        e.nextShield = e.spawnUntil + 15e3 + 14e3;
+      }
+      if (type === "FIRELORD") e.nextScream = e.spawnUntil + 3500;
       if (type === "BOSS") e.nextLeap = e.spawnUntil + 3e3;
       e.nextTaunt = e.spawnUntil + 500;
       enemies.push(e);
@@ -1074,7 +1352,7 @@
         spawnGroups.unshift(amount - cap);
         amount = cap;
       }
-      const tornadoCount = type === "TORNADO" ? Math.min(amount, 2 - tornadoesThisWave) : 0;
+      const tornadoCount = type === "TORNADO" ? Math.min(amount, (wave > 10 ? 4 : 2) - tornadoesThisWave) : 0;
       if (tornadoCount) tornadoesThisWave += tornadoCount;
       const center = type === "MOLE" || type === "PLANT" ? findHomeSpawn(type === "PLANT" ? 34 : 26) : findSpawnPosition(28), { x, y } = center;
       for (let i = 0; i < amount; i++) {
@@ -1106,10 +1384,11 @@
       x = Math.max(70, Math.min(world.w - 70, x));
       y = Math.max(70, Math.min(world.h - 70, y));
       if (!collidesTree(x, y, 30)) return { x, y };
-      for (let r = 30; r < 300; r += 20) for (let k = 0; k < 12; k++) {
-        const a = k / 12 * Math.PI * 2, nx = x + Math.cos(a) * r, ny = y + Math.sin(a) * r;
-        if (nx > 70 && ny > 70 && nx < world.w - 70 && ny < world.h - 70 && !collidesTree(nx, ny, 30)) return { x: nx, y: ny };
-      }
+      for (let r = 30; r < 300; r += 20)
+        for (let k = 0; k < 12; k++) {
+          const a = k / 12 * Math.PI * 2, nx = x + Math.cos(a) * r, ny = y + Math.sin(a) * r;
+          if (nx > 70 && ny > 70 && nx < world.w - 70 && ny < world.h - 70 && !collidesTree(nx, ny, 30)) return { x: nx, y: ny };
+        }
       return { x: H.x, y: H.y + 200 };
     }
     function pushDrop(x, y, type, life) {
@@ -1144,7 +1423,25 @@
       e.scored = true;
       const p = players.get(id);
       if (!p) return;
-      const value = { FOX: 10, WOLF: 25, EAGLE: 15, SNAKE: 12, MOLE: 12, TORNADO: 22, ALIEN: 22, MAGE: 24, GHOST: 18, PLANT: 20, MECHAFROG: 30, MUSHNUB: 3, BOSS: 100, MUSHROOM: 150, ALIENBOSS: 175 }[e.type] || 10;
+      const value = {
+        FOX: 10,
+        WOLF: 25,
+        EAGLE: 15,
+        SNAKE: 12,
+        MOLE: 12,
+        TORNADO: 22,
+        ALIEN: 22,
+        MAGE: 24,
+        GHOST: 18,
+        PLANT: 20,
+        MECHAFROG: 30,
+        MUSHNUB: 3,
+        BOSS: 100,
+        MUSHROOM: 150,
+        ALIENBOSS: 175,
+        FIRELORD: 120,
+        RABBIT: 140
+      }[e.type] || 10;
       p.kills++;
       p.score += value;
     }
@@ -1190,12 +1487,28 @@
       if (choice.type === "player") damagePlayer(choice.obj, damage, now);
       else damageFarm(damage, now);
     }
+    const cloaked = (e, now) => e.type === "FIRELORD" && now >= (e.revealUntil || 0);
     function hittable(e, now) {
       return e.hp > 0 && !(now < (e.spawnUntil || 0)) && !(e.type === "PLANT" && now < (e.emergeAt || 0)) && !(e.type === "MOLE" && (now < e.burrowUntil || now < (e.emergeAt || 0))) && !(e.type === "ALIENBOSS" && now < (e.blinkUntil || 0));
     }
     function hitEnemy(e, damage, ownerId, now) {
+      if (e.type === "GHOST" && now < (e.etherealUntil || 0)) {
+        e.phaseHitAt = now;
+        return;
+      }
+      if (e.resist) damage *= e.resist;
+      if (e.type === "FIRELORD") e.revealUntil = Math.max(e.revealUntil || 0, now + 1200);
       if (now < (e.shieldUntil || 0)) {
-        damage *= e.illusion ? 0.75 : 0.25;
+        const red = e.shieldRed != null ? e.shieldRed : e.illusion ? 0.25 : 0.75;
+        if (e.shieldHp != null) {
+          e.shieldHp -= damage;
+          if (e.shieldHp <= 0) {
+            e.shieldUntil = now;
+            pushFx("shieldBreak", e.x, e.y, { type: e.type });
+            sweep(1400, 200, 0.35, "square", 0.05);
+          }
+        }
+        damage *= 1 - red;
         e.shieldHitAt = now;
       }
       if (e.type === "MAGE" && players.has(ownerId) && !e.aggroId) {
@@ -1215,12 +1528,14 @@
           return;
         }
         if (e.type === "ALIENBOSS") {
-          for (const o of enemies) if (o.illusion && o.ownerRef === e && o.hp > 0) {
-            o.hp = 0;
-            pushFx("illusionPop", o.x, o.y);
-          }
+          for (const o of enemies)
+            if (o.illusion && o.ownerRef === e && o.hp > 0) {
+              o.hp = 0;
+              pushFx("illusionPop", o.x, o.y);
+            }
         }
         awardKill(e, ownerId);
+        if (e.type === "MECHAFROG") mechExplode(e, now);
         if (e.turretDrop && !turret.active && !drops.some((d) => d.type === "TURRET")) {
           pushDrop(e.x, e.y, "TURRET", Infinity);
           toast("The Chupacabras dropped a CHICKEN TURRET! Grab it!");
@@ -1267,11 +1582,12 @@
         e.x += Math.cos(e.travelAngle) * e.speed * dt;
         e.y += Math.sin(e.travelAngle) * e.speed * dt;
         if (now - e.hitAt > 850) {
-          for (const p of players.values()) if (p.hp > 0 && Math.hypot(p.x - e.x, p.y - e.y) < e.r + 27) {
-            e.hitAt = now;
-            applyEnemyDamage({ obj: p, type: "player" }, e.damage, now);
-            break;
-          }
+          for (const p of players.values())
+            if (p.hp > 0 && Math.hypot(p.x - e.x, p.y - e.y) < e.r + 27) {
+              e.hitAt = now;
+              applyEnemyDamage({ obj: p, type: "player" }, e.damage, now);
+              break;
+            }
           if (now - e.hitAt > 850 && Math.hypot(H.x - e.x, H.y - e.y) < e.r + 65) {
             e.hitAt = now;
             applyEnemyDamage({ obj: H, type: "farm" }, e.damage, now);
@@ -1280,6 +1596,12 @@
         if (e.x < -100 || e.y < -100 || e.x > world.w + 100 || e.y > world.h + 100) e.hp = 0;
         return;
       }
+      if (e.type === "GHOST" && now >= (e.nextEthereal || Infinity)) {
+        e.etherealUntil = now + 1400;
+        e.nextEthereal = now + 4200 + Math.random() * 2600;
+      }
+      if (e.type === "FIRELORD") return updateFireLord(e, dt, now);
+      if (e.type === "RABBIT") return updateRabbit(e, dt, now);
       let choice = aimTarget(e);
       if (e.type === "MAGE") {
         const ag = e.aggroId && players.get(e.aggroId);
@@ -1287,7 +1609,8 @@
       }
       if (e.illusion) {
         const ps = [...players.values()].filter((p) => p.hp > 0);
-        if (!e.fakeTarget || Math.random() < 4e-3) e.fakeTarget = Math.random() < 0.5 || !ps.length ? { x: H.x + (Math.random() - 0.5) * 500, y: H.y + (Math.random() - 0.5) * 400 } : ps[Math.floor(Math.random() * ps.length)];
+        if (!e.fakeTarget || Math.random() < 4e-3)
+          e.fakeTarget = Math.random() < 0.5 || !ps.length ? { x: H.x + (Math.random() - 0.5) * 500, y: H.y + (Math.random() - 0.5) * 400 } : ps[Math.floor(Math.random() * ps.length)];
         choice = { obj: e.fakeTarget, type: "decoy" };
       }
       const pack = nearbyEnemies(e, 240);
@@ -1316,7 +1639,15 @@
         e.nextFire = now + 2600;
         e.attackAt = now;
         const angle = Math.atan2(dy, dx), speed2 = 310;
-        fireballs.push({ x: e.x + Math.cos(angle) * 32, y: e.y + Math.sin(angle) * 32, dx: Math.cos(angle) * speed2, dy: Math.sin(angle) * speed2, t: 3.2, damage: 5.6, kind: "fire" });
+        fireballs.push({
+          x: e.x + Math.cos(angle) * 32,
+          y: e.y + Math.sin(angle) * 32,
+          dx: Math.cos(angle) * speed2,
+          dy: Math.sin(angle) * speed2,
+          t: 3.2,
+          damage: 5.6,
+          kind: "fire"
+        });
         tone(145, 0.24, "sawtooth", 0.045);
       }
       if (e.type === "MUSHROOM" && now >= (e.nextSpores || 0)) {
@@ -1333,28 +1664,42 @@
         pushFx("sporeRain", e.x, e.y, { spots });
         for (const sp of spots) pendingSpawns.push({ at: now + 1300, type: "MUSHNUB", x: sp.x, y: sp.y });
       }
+      if (e.type === "MUSHROOM" && now >= (e.nextShield || Infinity)) {
+        e.nextShield = now + 29e3;
+        raiseShield(e, now, 15e3, 0.7, 30);
+        say(e, "THE MYCELIUM PROTECTS ME!", now);
+      }
       if (e.type === "MUSHROOM" && now >= e.nextAbility) {
         e.nextAbility = now + 4600;
         e.attackAt = now;
         const n = 12;
         for (let i = 0; i < n; i++) {
           const a = i / n * Math.PI * 2 + e.phase, speed2 = 200;
-          fireballs.push({ x: e.x + Math.cos(a) * 36, y: e.y + Math.sin(a) * 36, dx: Math.cos(a) * speed2, dy: Math.sin(a) * speed2, t: 2.6, damage: 4, kind: "spore" });
+          fireballs.push({
+            x: e.x + Math.cos(a) * 36,
+            y: e.y + Math.sin(a) * 36,
+            dx: Math.cos(a) * speed2,
+            dy: Math.sin(a) * speed2,
+            t: 2.6,
+            damage: 4,
+            kind: "spore"
+          });
         }
         pushFx("sporeBurst", e.x, e.y);
         sweep(180, 60, 0.45, "triangle", 0.06);
       }
       if (e.type === "ALIENBOSS") {
         if (!e.illusion && now >= (e.nextShield || 0)) {
-          e.nextShield = now + 24e3;
-          e.shieldUntil = now + 15e3;
+          e.nextShield = now + 27e3;
+          raiseShield(e, now, 15e3, 0.75, 30);
           say(e, "SHIELDS UP, PUNY CHICKENS.", now);
-          pushFx("shieldUp", e.x, e.y);
           sweep(200, 1200, 0.5, "sine", 0.05);
         }
         if (e.illusion && now >= (e.nextShield || 0)) {
           e.nextShield = now + 14e3 + Math.random() * 6e3;
           e.shieldUntil = now + 5e3;
+          e.shieldRed = 0.25;
+          e.shieldHp = null;
         }
         if (!e.illusion && now >= (e.nextIllusion || 0) && enemies.filter((o) => o.illusion && o.ownerRef === e && o.hp > 0).length === 0) {
           e.nextIllusion = now + 2e4;
@@ -1362,7 +1707,19 @@
           const ratio = e.hp / e.maxHp;
           for (let i = 0; i < 3; i++) {
             const a = i / 3 * Math.PI * 2 + Math.random(), x = Math.max(80, Math.min(world.w - 80, e.x + Math.cos(a) * 140)), y = Math.max(80, Math.min(world.h - 80, e.y + Math.sin(a) * 140)), hp = Math.max(1, Math.ceil(e.hp * 0.25));
-            const c = Object.assign(makeElite("ALIENBOSS", x, y, wave - 1, now), { illusion: true, ownerRef: e, hp, maxHp: Math.max(hp, Math.round(hp / Math.max(0.05, ratio))), nextShield: now + 2e3 + Math.random() * 4e3, nextBlink: now + 3e3 + Math.random() * 3e3, nextFire: now + 1500 + Math.random() * 1500, teleportAt: now, nextTaunt: Infinity });
+            const c = Object.assign(makeElite("ALIENBOSS", x, y, wave - 1, now), {
+              illusion: true,
+              shieldUntil: 0,
+              shieldHp: null,
+              ownerRef: e,
+              hp,
+              maxHp: Math.max(hp, Math.round(hp / Math.max(0.05, ratio))),
+              nextShield: now + 2e3 + Math.random() * 4e3,
+              nextBlink: now + 3e3 + Math.random() * 3e3,
+              nextFire: now + 1500 + Math.random() * 1500,
+              teleportAt: now,
+              nextTaunt: Infinity
+            });
             enemies.push(c);
             pushFx("teleport", e.x, e.y, { to: { x, y }, color: "#c46bff" });
           }
@@ -1408,23 +1765,34 @@
           const base = Math.atan2(dy, dx);
           for (const off of [-0.35, 0, 0.35]) {
             const a = base + off;
-            fireballs.push({ x: e.x + Math.cos(a) * 30, y: e.y + Math.sin(a) * 30, dx: Math.cos(a) * 190, dy: Math.sin(a) * 190, t: 3.6, damage: 4, kind: "rocket", homing: choice.type === "player" ? target.id : "farm" });
+            fireballs.push({
+              x: e.x + Math.cos(a) * 30,
+              y: e.y + Math.sin(a) * 30,
+              dx: Math.cos(a) * 285,
+              dy: Math.sin(a) * 285,
+              t: 2.6,
+              damage: 4,
+              kind: "rocket",
+              homing: choice.type === "player" ? target.id : "farm"
+            });
           }
           tone(220, 0.12, "square", 0.03);
         }
       }
-      if (e.type === "MUSHNUB" && d < e.r + 34) {
+      const reach = choice.type === "farm" ? e.r + COOP_REACH : e.r + 31;
+      if (e.type === "MUSHNUB" && d < (choice.type === "farm" ? reach : e.r + 34)) {
         explodeMushnub(e, now);
         return;
       }
       if (e.type === "ALIEN" && d < 335 && now >= e.nextFire) {
         e.nextFire = now + 3e3;
         let length = d, blocked = false;
-        for (let step = 24; step < d; step += 20) if (collidesTree(e.x + vx * step, e.y + vy * step, 5, true)) {
-          length = step;
-          blocked = true;
-          break;
-        }
+        for (let step = 24; step < d; step += 20)
+          if (collidesTree(e.x + vx * step, e.y + vy * step, 5, true)) {
+            length = step;
+            blocked = true;
+            break;
+          }
         enemyBeams.push({ x1: e.x + vx * 20, y1: e.y + vy * 20, x2: e.x + vx * length, y2: e.y + vy * length, t: 0.24, color: "#7cfff0" });
         if (!blocked) applyEnemyDamage(choice, e.damage * 1.5, now);
         tone(780, 0.12, "sawtooth", 0.035);
@@ -1433,7 +1801,15 @@
         e.nextFire = now + 1950;
         e.attackAt = now;
         const angle = Math.atan2(dy, dx), speed2 = 260;
-        fireballs.push({ x: e.x + Math.cos(angle) * 28, y: e.y + Math.sin(angle) * 28, dx: Math.cos(angle) * speed2, dy: Math.sin(angle) * speed2, t: 3.1, damage: e.damage, kind: "seed" });
+        fireballs.push({
+          x: e.x + Math.cos(angle) * 28,
+          y: e.y + Math.sin(angle) * 28,
+          dx: Math.cos(angle) * speed2,
+          dy: Math.sin(angle) * speed2,
+          t: 3.1,
+          damage: e.damage,
+          kind: "seed"
+        });
         tone(360, 0.07, "triangle", 0.025);
       }
       if (e.type === "MAGE" && d > 230 && now >= e.nextAbility) {
@@ -1475,7 +1851,7 @@
         speed *= 2.8;
       }
       if (e.type === "PLANT") return;
-      if (d > e.r + 31 && speed > 0) {
+      if (d > reach && speed > 0) {
         const dxm = vx / Math.hypot(vx, vy) * speed * dt, dym = vy / Math.hypot(vx, vy) * speed * dt;
         const oldX = e.x, oldY = e.y;
         let pos;
@@ -1531,6 +1907,111 @@
       if (Math.hypot(H.x - e.x, H.y - e.y) < 125) damageFarm(e.damage * 0.5, now);
       tone(180, 0.12, "square", 0.05);
     }
+    function mechExplode(e, now) {
+      pushFx("mechBoom", e.x, e.y);
+      for (const p of players.values()) if (p.hp > 0 && Math.hypot(p.x - e.x, p.y - e.y) < 78) damagePlayer(p, 8, now);
+      if (Math.hypot(H.x - e.x, H.y - e.y) < COOP_REACH + 70) damageFarm(4, now);
+      tone(90, 0.3, "sawtooth", 0.07);
+    }
+    const SCREAM_RANGE = 330, SCREAM_SPREAD = 0.55;
+    function updateFireLord(e, dt, now) {
+      const dx = H.x - e.x, dy = H.y - e.y, d = Math.hypot(dx, dy) || 1;
+      if (e.screamFireAt) {
+        e.moving = false;
+        if (now >= e.screamFireAt) {
+          const a = e.screamAngle;
+          e.screamFireAt = 0;
+          e.attackAt = now;
+          pushFx("sonicScream", e.x, e.y, { a, range: SCREAM_RANGE, spread: SCREAM_SPREAD });
+          const inCone = (x, y, r = 0) => {
+            const dd = Math.hypot(x - e.x, y - e.y);
+            if (dd > SCREAM_RANGE + r) return false;
+            const da = Math.abs(Math.atan2(Math.sin(Math.atan2(y - e.y, x - e.x) - a), Math.cos(Math.atan2(y - e.y, x - e.x) - a)));
+            return da < SCREAM_SPREAD + Math.atan2(r, Math.max(1, dd));
+          };
+          for (const p of players.values()) if (p.hp > 0 && inCone(p.x, p.y, 20)) damagePlayer(p, 34, now);
+          if (inCone(H.x, H.y, COOP_REACH)) damageFarm(12, now);
+          sweep(2200, 260, 0.7, "sawtooth", 0.09);
+          sweep(1600, 120, 0.8, "square", 0.05);
+        }
+        return;
+      }
+      e.facing = Math.atan2(dy, dx);
+      if (d < SCREAM_RANGE - 40 && now >= e.nextScream) {
+        e.nextScream = now + 6500 + Math.random() * 1500;
+        e.screamAngle = Math.atan2(dy, dx);
+        e.screamFireAt = now + 750;
+        e.revealUntil = now + 2200;
+        e.chargeAt = now;
+        say(e, "SCREEEEEEE!", now);
+        pushFx("screamCharge", e.x, e.y, { a: e.screamAngle });
+        sweep(200, 900, 0.7, "triangle", 0.05);
+        return;
+      }
+      if (d > e.r + COOP_REACH + 120) {
+        const ox = e.x, oy = e.y, pos = moveEnemy(e, dx / d * e.speed * dt, dy / d * e.speed * dt, e.r);
+        e.x = pos.x;
+        e.y = pos.y;
+        e.moving = Math.hypot(e.x - ox, e.y - oy) > 0.01;
+      } else e.moving = false;
+    }
+    function rabbitGoal(e, mode) {
+      for (let i = 0; i < 30; i++) {
+        const a = Math.random() * Math.PI * 2, r = mode === "in" ? COOP_REACH + 40 + Math.random() * 90 : 470 + Math.random() * 230, x = Math.max(70, Math.min(world.w - 70, H.x + Math.cos(a) * r)), y = Math.max(70, Math.min(world.h - 70, H.y + Math.sin(a) * r * 0.85));
+        if (!collidesTree(x, y, e.r)) return { x, y };
+      }
+      return mode === "in" ? { x: H.x, y: H.y + 150 } : findSpawnPosition(e.r);
+    }
+    function updateRabbit(e, dt, now) {
+      if (!e.goal) e.goal = rabbitGoal(e, e.mode);
+      if (e.mode === "wait") {
+        e.moving = false;
+        if (now >= e.modeUntil) {
+          e.mode = "in";
+          e.goal = rabbitGoal(e, "in");
+          if (Math.random() < 0.6) say(e, TAUNTS.RABBIT[Math.floor(Math.random() * TAUNTS.RABBIT.length)], now);
+        }
+        return;
+      }
+      const dx = e.goal.x - e.x, dy = e.goal.y - e.y, d = Math.hypot(dx, dy) || 1;
+      if (d < 26 || (e.stuckFor || 0) > 1.2) {
+        e.stuckFor = 0;
+        if (e.mode === "in") {
+          e.attackAt = now;
+          const n = 2 + Math.floor(Math.random() * 2);
+          for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 45;
+            carrots.push({ id: ++fxId, x: e.x + Math.cos(a) * r, y: e.y + Math.sin(a) * r, at: now, explodeAt: now + 1700 + i * 220 });
+          }
+          tone(520, 0.08, "square", 0.03);
+          e.mode = "out";
+          e.goal = rabbitGoal(e, "out");
+        } else {
+          e.mode = "wait";
+          e.modeUntil = now + 1400 + Math.random() * 1800;
+          e.goal = null;
+        }
+        return;
+      }
+      const ox = e.x, oy = e.y, sp = e.speed * (now < (e.hitUntil || 0) + 400 ? 1.15 : 1), pos = moveEnemy(e, dx / d * sp * dt, dy / d * sp * dt, e.r);
+      e.x = pos.x;
+      e.y = pos.y;
+      const moved = Math.hypot(e.x - ox, e.y - oy);
+      e.moving = moved > 0.01;
+      if (e.moving) e.facing = Math.atan2(e.y - oy, e.x - ox);
+      e.stuckFor = moved < sp * dt * 0.25 ? (e.stuckFor || 0) + dt : 0;
+    }
+    function updateCarrots(now) {
+      if (!carrots.length) return;
+      carrots = carrots.filter((c) => {
+        if (now < c.explodeAt) return true;
+        pushFx("carrotBoom", c.x, c.y);
+        for (const p of players.values()) if (p.hp > 0 && Math.hypot(p.x - c.x, p.y - c.y) < 88) damagePlayer(p, 12, now);
+        if (Math.hypot(H.x - c.x, H.y - c.y) < COOP_REACH + 90) damageFarm(5, now);
+        tone(110, 0.22, "sawtooth", 0.06);
+        return false;
+      });
+    }
     function theremin() {
       if (!soundOn || !audio) return;
       try {
@@ -1580,10 +2061,11 @@
       let len = beamLength(x0, y0, angle, LASER_RANGE), hit = null;
       for (let s = 0; s <= len; s += 10) {
         const x = x0 + Math.cos(angle) * s, y = y0 + Math.sin(angle) * s;
-        for (const e of enemies) if (hittable(e, now) && Math.hypot(e.x - x, e.y - y) < e.r + 6) {
-          hit = e;
-          break;
-        }
+        for (const e of enemies)
+          if (hittable(e, now) && Math.hypot(e.x - x, e.y - y) < e.r + 6) {
+            hit = e;
+            break;
+          }
         if (hit) {
           len = s;
           break;
@@ -1594,15 +2076,27 @@
     }
     function fireSeeker(p, angle) {
       const dx = Math.cos(angle), dy = Math.sin(angle);
-      shots.push({ x: p.x + dx * 34, y: p.y + dy * 34, dx: dx * 500, dy: dy * 500, t: 1.36, damage: 3, ownerId: p.id, color: "#ff8a3d", missile: true, speed: 500, target: null });
+      shots.push({
+        x: p.x + dx * 34,
+        y: p.y + dy * 34,
+        dx: dx * 500,
+        dy: dy * 500,
+        t: 0.544,
+        damage: 2.1,
+        ownerId: p.id,
+        color: "#ff8a3d",
+        missile: true,
+        speed: 500,
+        target: null
+      });
       tone(180, 0.09, "sawtooth", 0.03);
     }
     function steerMissile(b, dt, now) {
       if (!b.target || b.target.hp <= 0 || !hittable(b.target, now)) {
-        let best = null, bd = 420;
+        let best = null, bd = 170;
         const a = Math.atan2(b.dy, b.dx);
         for (const e of enemies) {
-          if (!hittable(e, now)) continue;
+          if (!hittable(e, now) || cloaked(e, now)) continue;
           const d = Math.hypot(e.x - b.x, e.y - b.y);
           if (d > bd) continue;
           const da = Math.abs(Math.atan2(Math.sin(Math.atan2(e.y - b.y, e.x - b.x) - a), Math.cos(Math.atan2(e.y - b.y, e.x - b.x) - a)));
@@ -1621,7 +2115,7 @@
     function tryHulkDash(p, now) {
       let best = null, bd = 260;
       for (const e of enemies) {
-        if (!hittable(e, now)) continue;
+        if (!hittable(e, now) || cloaked(e, now)) continue;
         const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) - e.r;
         if (d < 70 || d > bd) continue;
         const da = Math.abs(Math.atan2(Math.sin(Math.atan2(dy, dx) - p.aim), Math.cos(Math.atan2(dy, dx) - p.aim)));
@@ -1644,7 +2138,10 @@
       if (!soundOn || !audio) return;
       try {
         const now = audio.currentTime;
-        for (const [at, f] of [[0, 330], [0.16, 370]]) {
+        for (const [at, f] of [
+          [0, 330],
+          [0.16, 370]
+        ]) {
           const o = audio.createOscillator(), o2 = audio.createOscillator(), g = audio.createGain();
           o.type = "sawtooth";
           o2.type = "triangle";
@@ -1697,7 +2194,7 @@
       if (!turret.active) return;
       let best = null, bestD = 600;
       for (const e of enemies) {
-        if (!hittable(e, now)) continue;
+        if (!hittable(e, now) || cloaked(e, now)) continue;
         const d = Math.hypot(e.x - H.x, e.y - H.y);
         if (d < bestD) {
           best = e;
@@ -1716,7 +2213,19 @@
         turret.lastShot = now;
         turret.shotAt = now;
         const a = turret.angle, dx = Math.cos(a), dy = Math.sin(a);
-        shots.push({ x: H.x + dx * 30, y: H.y + dy * 30, dx: dx * 680, dy: dy * 680, t: 1, damage: 1, ownerId: "TURRET", turret: true, startX: H.x, startY: H.y, color: "#ffd34d" });
+        shots.push({
+          x: H.x + dx * 30,
+          y: H.y + dy * 30,
+          dx: dx * 680,
+          dy: dy * 680,
+          t: 1,
+          damage: 1,
+          ownerId: "TURRET",
+          turret: true,
+          startX: H.x,
+          startY: H.y,
+          color: "#ffd34d"
+        });
       }
     }
     function updateRevives(dt, now) {
@@ -1854,6 +2363,7 @@
       updateTurret(dt, now);
       updateSuperChicken(now);
       processPendingSpawns(now);
+      updateCarrots(now);
       for (const b of shots) {
         if (b.missile) steerMissile(b, dt, now);
         const ox = b.x, oy = b.y;
@@ -1895,11 +2405,12 @@
           continue;
         }
         let hit = false;
-        for (const p of players.values()) if (p.hp > 0 && Math.hypot(p.x - b.x, p.y - b.y) < 32) {
-          damagePlayer(p, b.damage, now);
-          hit = true;
-          break;
-        }
+        for (const p of players.values())
+          if (p.hp > 0 && Math.hypot(p.x - b.x, p.y - b.y) < 32) {
+            damagePlayer(p, b.damage, now);
+            hit = true;
+            break;
+          }
         if (!hit && Math.hypot(H.x - b.x, H.y - b.y) < 125) {
           damageFarm(b.damage, now);
           hit = true;
@@ -1943,7 +2454,30 @@
       const now = clock();
       tick(dt, now);
       if (!started) for (const p of players.values()) send(p);
-      game3d.render({ night: started && isNight(), players, enemies, shots, fireballs, drops, enemyBeams, bloodSplats, farmHp, henLastHit, countdown, wave, turret, fx, superChicken, lobby: !started && !gameOver, gameOver }, dt, now);
+      game3d.render(
+        {
+          night: started && isNight(),
+          players,
+          enemies,
+          shots,
+          fireballs,
+          carrots,
+          drops,
+          enemyBeams,
+          bloodSplats,
+          farmHp,
+          henLastHit,
+          countdown,
+          wave,
+          turret,
+          fx,
+          superChicken,
+          lobby: !started && !gameOver,
+          gameOver
+        },
+        dt,
+        now
+      );
       $("#wave").textContent = wave;
       const cd = $("#countdown");
       if (cd) {
@@ -2027,10 +2561,11 @@
       setLocalButtons();
       toast(n + " joined with keyboard + mouse");
     }
-    for (const b of document.querySelectorAll(".local-play-btn")) b.onclick = (e) => {
-      e.currentTarget.blur();
-      toggleLocalPlayer();
-    };
+    for (const b of document.querySelectorAll(".local-play-btn"))
+      b.onclick = (e) => {
+        e.currentTarget.blur();
+        toggleLocalPlayer();
+      };
     addEventListener("keydown", (e) => {
       if (!localConn || hostTyping(e)) return;
       const k = (e.key || "").toLowerCase();
@@ -2074,68 +2609,123 @@
       }
       localConn.emit("data", { type: "input", world: true, move: mv, aim, fire });
     }, 33);
-    window.__chickenHorde = { players, get enemies() {
-      return enemies;
-    }, get drops() {
-      return drops;
-    }, turret, world, trees, startMatch, setWave: (n) => {
-      enemies = [];
-      startWave(n);
-    }, spawnElite: (t) => spawnElite(t, clock()), pushDrop: (t, x = H.x, y = H.y + 140) => pushDrop(x, y, t, 60), get farmHp() {
-      return farmHp;
-    }, set farmHp(v) {
-      farmHp = v;
-    }, hitFarm: (d = 0) => damageFarm(d, clock()), get roomCode() {
-      return roomCode;
-    }, net, pause: (v) => {
-      paused = v;
-    }, god: (v) => {
-      godMode = v;
-    }, addEnemy: (type, x, y, extra = {}) => {
-      const now = clock(), e = ["BOSS", "MUSHROOM", "ALIENBOSS"].includes(type) ? makeElite(type, x, y, wave, now) : makeEnemy(type, x, y, wave, now);
-      Object.assign(e, extra);
-      enemies.push(e);
-      return e;
-    }, get laserWave() {
-      return laserWave;
-    }, dbg: () => ({ wave, started, paused, countdown, remainingToSpawn, elitesToSpawn, waveGroups, left: spawnGroups.length, n: enemies.length, farmHp, gameOver }), hit: (e, d, id) => hitEnemy(e, d, id, clock()), sim: (sec) => {
-      for (let t = 0; t < sec; t += 0.05) {
-        timeShift += 50;
-        for (const p of players.values()) if (p.connected) p.lastSeen = clock();
-        tick(0.05, clock());
+    window.__chickenHorde = {
+      players,
+      get enemies() {
+        return enemies;
+      },
+      get carrots() {
+        return carrots;
+      },
+      get drops() {
+        return drops;
+      },
+      turret,
+      world,
+      trees,
+      startMatch,
+      setWave: (n) => {
+        enemies = [];
+        startWave(n);
+      },
+      spawnElite: (t) => spawnElite(t, clock()),
+      pushDrop: (t, x = H.x, y = H.y + 140) => pushDrop(x, y, t, 60),
+      get farmHp() {
+        return farmHp;
+      },
+      set farmHp(v) {
+        farmHp = v;
+      },
+      hitFarm: (d = 0) => damageFarm(d, clock()),
+      get roomCode() {
+        return roomCode;
+      },
+      net,
+      pause: (v) => {
+        paused = v;
+      },
+      god: (v) => {
+        godMode = v;
+      },
+      addEnemy: (type, x, y, extra = {}) => {
+        const now = clock(), e = ["BOSS", "MUSHROOM", "ALIENBOSS", "FIRELORD", "RABBIT"].includes(type) ? makeElite(type, x, y, wave, now) : makeEnemy(type, x, y, wave, now);
+        Object.assign(e, extra);
+        enemies.push(e);
+        return e;
+      },
+      get laserWave() {
+        return laserWave;
+      },
+      dbg: () => ({
+        wave,
+        started,
+        paused,
+        countdown,
+        remainingToSpawn,
+        elitesToSpawn,
+        waveGroups,
+        left: spawnGroups.length,
+        n: enemies.length,
+        farmHp,
+        gameOver
+      }),
+      hit: (e, d, id) => hitEnemy(e, d, id, clock()),
+      sim: (sec) => {
+        for (let t = 0; t < sec; t += 0.05) {
+          timeShift += 50;
+          for (const p of players.values()) if (p.connected) p.lastSeen = clock();
+          tick(0.05, clock());
+        }
+        return enemies.length;
+      },
+      now: () => clock(),
+      get localPlayer() {
+        return localPlayer();
+      },
+      toggleLocalPlayer,
+      nightBanner,
+      addBot: (name) => {
+        const c = new Emitter();
+        c.open = true;
+        c.send = () => {
+        };
+        c.close = () => {
+          c.open = false;
+          c.emit("close");
+        };
+        onIncoming(c);
+        c.emit("data", { type: "join", clientId: "bot-" + name, name });
+        return c;
       }
-      return enemies.length;
-    }, now: () => clock(), get localPlayer() {
-      return localPlayer();
-    }, toggleLocalPlayer, nightBanner, addBot: (name) => {
-      const c = new Emitter();
-      c.open = true;
-      c.send = () => {
-      };
-      c.close = () => {
-        c.open = false;
-        c.emit("close");
-      };
-      onIncoming(c);
-      c.emit("data", { type: "join", clientId: "bot-" + name, name });
-      return c;
-    } };
+    };
   }
   function lockMobileZoom() {
     const isField = (t) => !!t && !!t.closest && !!t.closest("input,textarea,select,label,button,a,form,.howto");
     for (const type of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
-    document.addEventListener("touchmove", (e) => {
-      if (e.touches.length > 1 || !isField(e.target)) e.preventDefault();
-    }, { passive: false });
-    document.addEventListener("touchstart", (e) => {
-      if (e.touches.length > 1) e.preventDefault();
-    }, { passive: false });
+    document.addEventListener(
+      "touchmove",
+      (e) => {
+        if (e.touches.length > 1 || !isField(e.target)) e.preventDefault();
+      },
+      { passive: false }
+    );
+    document.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length > 1) e.preventDefault();
+      },
+      { passive: false }
+    );
     let lastTouchEnd = 0;
-    document.addEventListener("touchend", (e) => {
-      const now = Date.now();
-      if (now - lastTouchEnd < 380 && !isField(e.target)) e.preventDefault();
-      lastTouchEnd = now;
-    }, { passive: false });
+    document.addEventListener(
+      "touchend",
+      (e) => {
+        const now = Date.now();
+        if (now - lastTouchEnd < 380 && !isField(e.target)) e.preventDefault();
+        lastTouchEnd = now;
+      },
+      { passive: false }
+    );
     document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
     document.addEventListener("contextmenu", (e) => {
       if (!isField(e.target)) e.preventDefault();

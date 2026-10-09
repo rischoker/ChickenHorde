@@ -1,6 +1,17 @@
-# Chicken Horde V9 — Farm Defense (Express + Socket.IO en Render)
+# Chicken Horde V10 — Farm Defense (Express + Socket.IO en Render)
 
 La pantalla del proyector es el **host** (corre el juego 3D) y cada estudiante juega con su **celular como control**. Todo pasa por el propio servidor del juego en Render: no hay P2P ni CDNs, así que funciona detrás de los proxies de la academia mientras el dominio de Render esté permitido.
+
+## Novedades V10
+
+- **Fire Lord** (elite, oleada 11+): casi invisible (solo ascuas tenues), va directo a Mama Hen y lanza un grito sónico en cono muy letal. Poca vida; al dispararle se revela. La torreta y los misiles no lo detectan mientras está invisible.
+- **Crazy Rabbit** (jefe, oleada 13+): súper velocidad con estela, entra, deja zanahorias bomba cerca de Mama Hen y huye. Una barra de vida.
+- **Alien Overlord y Mushroom King**: doble barra de vida, resistencia a todas las armas (-40 % de daño), nacen con escudo y su vida y escudo escalan con el número de jugadores. El Mushroom King lanza esporas kamikaze apenas entra y ya no queda pegado al hongo gigante.
+- **Mecha Frog**: más vida, nace con un escudo ligero, cohetes 50 % más rápidos y explota al morir (daño en radio pequeño).
+- **Fantasmas**: modelo nuevo y habilidad *ethereal* (inmunes por momentos).
+- **Tornados**: hasta 4 por oleada después de la oleada 10.
+- **Chicken Seeker**: −60 % de alcance y −30 % de daño.
+- **Gallinero sólido**: nadie lo atraviesa; los enemigos atacan a Mama Hen desde la pared.
 
 ## Novedades V9
 

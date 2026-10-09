@@ -16,7 +16,7 @@ const FILES = [
   ['wolf', 'wolf.glb'], ['eagle', 'eagle.glb'], ['snake', 'snake.glb'], ['boss', 'chupacabras.glb'],
   ['egg', 'egg.glb'], ['grass', 'grass.glb'], ['house', 'hen-house.glb'],
   ['turret', 'chicken-turret.glb'], ['tornado', 'tornado.glb'], ['wizard', 'wizard.glb'], ['alien', 'alien.glb'], ['mushroom', 'mushroom-king.glb'],
-  ['coop', 'chicken-coop.glb'], ['mushnub', 'mushnub.glb'], ['mech', 'mech.glb'],
+  ['coop', 'chicken-coop.glb'], ['mushnub', 'mushnub.glb'], ['mech', 'mech.glb'], ['bunny', 'bunny.glb'], ['ghost', 'ghost.glb'], ['demon', 'demon.glb'],
   ['blasterD', 'weapons/blaster-d.glb'], ['blasterE', 'weapons/blaster-e.glb'], ['blasterO', 'weapons/blaster-o.glb'],
   ['treeA', 'nature/Tree_1_A_Color1.gltf'], ['treeB', 'nature/Tree_3_B_Color1.gltf'], ['rock', 'nature/Rock_1_A_Color1.gltf']
 ];
@@ -25,7 +25,9 @@ const MODEL_YAW = { eagle: Math.PI, wizard: -Math.PI / 2, mama: Math.PI / 2 };
 const ELITE_STYLE = {
   BOSS: { color: '#ff4d5e', glow: '#ff2a3d', symbol: 'skull' },
   MUSHROOM: { color: '#ffa53a', glow: '#ff7b00', symbol: 'crown' },
-  ALIENBOSS: { color: '#c46bff', glow: '#9b30ff', symbol: 'star' }
+  ALIENBOSS: { color: '#c46bff', glow: '#9b30ff', symbol: 'star' },
+  FIRELORD: { color: '#ff7a1a', glow: '#ff3d00', symbol: 'flame' },
+  RABBIT: { color: '#ff8fd0', glow: '#ff4fb0', symbol: 'carrot' }
 };
 const DROP_STYLE = {
   SHIELD: { color: '#4fc3ff', label: 'SHIELD' }, MEDKIT: { color: '#ff5468', label: 'MEDKIT' },
@@ -77,7 +79,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   const playerNodes = new Map(), enemyNodes = new Map(), projectileNodes = new Map(), fireballNodes = new Map(), dropNodes = new Map(), beamNodes = new Map(), bloodNodes = new Map();
   const seenFx = new Set(), activeFx = [];
   let farmBar = null, countdownSprite = null, ready = false, lastFarmValue = -1, lastCountdown = -1;
-  let henBubbleSuper = false, lantern = null, nightBlend = 0, battleFogMesh = null, mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0;
+  let henBubbleSuper = false, lantern = null, nightBlend = 0, battleFogMesh = null, mama = null, henBubble = null, stage = null, turretNode = null, houseTop = 3.2, lastHenHit = 0, houseBox = null, lastNow = 0;
   const target = new THREE.Vector3(0, 1, 0);
   let shake = 0, cameraDistance = 20.5, lobbyBlend = 1, snapCam = 0, focusCam = null;
 
@@ -156,7 +158,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       const mixer = new THREE.AnimationMixer(model);
       const find = re => clips.find(c => re.test(c.name) && !/\|/.test(c.name) === false) || clips.find(c => re.test(c.name));
       const actions = {};
-      for (const [state, re] of [['walk', modelKey === 'wolf' ? /Gallop$/ : /Walk/], ['run', /Run|Gallop$/], ['idle', /Idle$/], ['attack', /Punch|Attack|Bite_Front|Weapon/], ['hit', /HitRe/], ['dance', /Dance|Wave|Yes/], ['jump', /\|Jump$/], ['shoot', /Shoot_Small|Shoot_Big/]]) {
+      for (const [state, re] of [['walk', modelKey === 'wolf' ? /Gallop$/ : modelKey === 'ghost' ? /Flying_Idle/ : modelKey === 'bunny' ? /\|Run$/ : /Walk/], ['run', modelKey === 'ghost' ? /Fast_Flying/ : /Run|Gallop$/], ['idle', modelKey === 'ghost' ? /Flying_Idle/ : /Idle$/], ['attack', /Punch|Attack|Bite_Front|Weapon/], ['hit', /HitRe/], ['dance', /Dance|Wave|Yes/], ['jump', /\|Jump$/], ['shoot', /Shoot_Small|Shoot_Big/]]) {
         const clip = find(re);
         if (clip) actions[state] = mixer.clipAction(clip);
       }
@@ -315,6 +317,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       g.fillStyle = 'rgba(30,70,35,.28)'; g.fillRect(0, 0, W, ay); g.fillRect(0, by, W, D - by); g.fillRect(0, ay, ax, by - ay); g.fillRect(bx, ay, W - bx, by - ay);
       // Shadows/flattened grass under obstacles.
       for (const t of trees) {
+        if (t.kind === 'coop') continue;
         const [x, y] = toPx(t.x, t.y), r = (t.kind === 'tree' ? 1.5 * (t.s || 1) : t.kind === 'rock' ? 0.9 * t.radius / 20 : 0.6) * PX, grad = g.createRadialGradient(x, y, 0, x, y, r);
         grad.addColorStop(0, t.kind === 'rock' ? 'rgba(120,96,64,.45)' : 'rgba(30,60,25,.38)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = grad; g.fillRect(x - r, y - r, r * 2, r * 2);
@@ -487,7 +490,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     }
     house.updateMatrixWorld(true);
     const hb = new THREE.Box3().setFromObject(house);
-    houseTop = hb.max.y;
+    houseTop = hb.max.y; houseBox = hb.clone();
     // Straw nest and eggs in front of the house, Mama Hen on top of it.
     const nestPos = actorPosition(world.home.x, world.home.y + 116);
     const nest = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.32, 10, 28), new THREE.MeshStandardMaterial({ map: hayTex, roughness: 1 }));
@@ -569,12 +572,14 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     g.fillStyle = '#1a0f12'; g.strokeStyle = '#1a0f12'; g.lineWidth = 3;
     if (kind === 'crown') { g.beginPath(); g.moveTo(-r * .6, r * .35); g.lineTo(-r * .6, -r * .3); g.lineTo(-r * .3, 0); g.lineTo(0, -r * .5); g.lineTo(r * .3, 0); g.lineTo(r * .6, -r * .3); g.lineTo(r * .6, r * .35); g.closePath(); g.fill(); }
     else if (kind === 'skull') { g.beginPath(); g.arc(0, -r * .1, r * .5, 0, Math.PI * 2); g.fill(); g.fillRect(-r * .3, r * .2, r * .6, r * .35); g.fillStyle = color; g.beginPath(); g.arc(-r * .2, -r * .12, r * .14, 0, 7); g.arc(r * .2, -r * .12, r * .14, 0, 7); g.fill(); }
+    else if (kind === 'flame') { g.beginPath(); g.moveTo(0, -r * .62); g.bezierCurveTo(r * .55, -r * .1, r * .45, r * .5, 0, r * .55); g.bezierCurveTo(-r * .45, r * .5, -r * .55, -r * .05, -r * .12, -r * .28); g.bezierCurveTo(-r * .1, 0, r * .05, -r * .2, 0, -r * .62); g.fill(); }
+    else if (kind === 'carrot') { g.beginPath(); g.moveTo(-r * .18, -r * .3); g.lineTo(r * .18, -r * .3); g.lineTo(0, r * .6); g.closePath(); g.fill(); g.fillRect(-r * .06, -r * .62, r * .12, r * .3); g.fillRect(-r * .3, -r * .55, r * .2, r * .1); g.fillRect(r * .1, -r * .55, r * .2, r * .1); }
     else { g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .28 : r * .65; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.closePath(); g.fill(); }
     g.restore();
   }
   // Player nameplate (also used for elites so both have exactly the same size).
-  function drawPlate(node, { text, health, color, elite = null }) {
-    const key = text + '|' + Math.round(health) + '|' + color;
+  function drawPlate(node, { text, health, color, elite = null, bars = 1, shield = -1 }) {
+    const key = text + '|' + Math.round(health) + '|' + color + '|' + bars + '|' + Math.round(shield);
     if (node.lastKey === key) return;
     node.lastKey = key;
     const { canvas: c, context: g, texture } = node;
@@ -589,8 +594,18 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     g.font = `900 ${fontSize}px Bungee, "Arial Black", sans-serif`;
     while (fontSize > 26 && g.measureText(text.slice(0, 24)).width > maxW) { fontSize -= 2; g.font = `900 ${fontSize}px Bungee, "Arial Black", sans-serif`; }
     g.fillText(text.slice(0, 24), x0, y0);
-    g.fillStyle = '#536252'; rounded(g, 25, 80, 462, 22, 9); g.fill();
-    g.fillStyle = elite ? color : health > 55 ? '#72d77f' : health > 25 ? '#f2c64c' : '#fa6262'; rounded(g, 25, 80, 462 * Math.max(0, Math.min(100, health)) / 100, 22, 9); g.fill();
+    if (bars === 2) {
+      // Two stacked health bars: the top one empties first.
+      const top = Math.max(0, Math.min(1, (health - 50) / 50)), bottom = Math.max(0, Math.min(1, health / 50));
+      g.fillStyle = '#536252'; rounded(g, 25, 74, 462, 15, 6); g.fill(); rounded(g, 25, 95, 462, 15, 6); g.fill();
+      g.fillStyle = color; if (top > 0) { rounded(g, 25, 74, 462 * top, 15, 6); g.fill(); }
+      g.fillStyle = '#ffe17a'; if (bottom > 0) { rounded(g, 25, 95, 462 * bottom, 15, 6); g.fill(); }
+      g.fillStyle = '#fff8de'; g.font = '900 13px Bungee, sans-serif'; g.textAlign = 'right'; g.fillText(top > 0 ? 'x2' : 'x1', 486, 26);
+    } else {
+      g.fillStyle = '#536252'; rounded(g, 25, 80, 462, 22, 9); g.fill();
+      g.fillStyle = elite ? color : health > 55 ? '#72d77f' : health > 25 ? '#f2c64c' : '#fa6262'; rounded(g, 25, 80, 462 * Math.max(0, Math.min(100, health)) / 100, 22, 9); g.fill();
+    }
+    if (shield >= 0) { g.fillStyle = 'rgba(140,240,255,.95)'; rounded(g, 25, 66, 462 * Math.min(1, shield / 100), 6, 3); g.fill(); }
     texture.needsUpdate = true;
   }
   function drawBubble(custom = null) {
@@ -669,7 +684,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
 
   function actorFor(type, size) {
     if (type === 'TORNADO') return makeTornado();
-    const key = ({ FOX: 'fox', WOLF: 'wolf', EAGLE: 'eagle', SNAKE: 'snake', BOSS: 'boss', MAGE: 'wizard', ALIEN: 'alien', ALIENBOSS: 'alien', MUSHROOM: 'mushroom', MUSHNUB: 'mushnub', MECHAFROG: 'mech' })[type];
+    const key = ({ FOX: 'fox', WOLF: 'wolf', EAGLE: 'eagle', SNAKE: 'snake', BOSS: 'boss', MAGE: 'wizard', ALIEN: 'alien', ALIENBOSS: 'alien', MUSHROOM: 'mushroom', MUSHNUB: 'mushnub', MECHAFROG: 'mech', GHOST: 'ghost', FIRELORD: 'demon', RABBIT: 'bunny' })[type];
     return makeModel(key ? models[key] : null, size, { tint: type === 'ALIENBOSS' ? '#b06bff' : type === 'MECHAFROG' ? '#3fbf4a' : null }) || makeFallbackActor(type);
   }
 
@@ -836,7 +851,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     r.canvas.texture.needsUpdate = true;
   }
 
-  const ENEMY_SIZE = { BOSS: 2.25, MUSHROOM: 2.6, ALIENBOSS: 2.7, EAGLE: 1.7, SNAKE: 0.66, WOLF: 2.2, FOX: 1.35, MOLE: 0.95, TORNADO: 1.6, ALIEN: 1.65, MUSHNUB: 0.95, MECHAFROG: 2.2, MAGE: 1.25, GHOST: 1.05, PLANT: 1.25 };
+  const ENEMY_SIZE = { FIRELORD: 2.5, RABBIT: 2.1, BOSS: 2.25, MUSHROOM: 2.6, ALIENBOSS: 2.7, EAGLE: 1.7, SNAKE: 0.66, WOLF: 2.2, FOX: 1.35, MOLE: 0.95, TORNADO: 1.6, ALIEN: 1.65, MUSHNUB: 0.95, MECHAFROG: 2.2, MAGE: 1.25, GHOST: 1.35, PLANT: 1.25 };
   function makeEnemy(enemy) {
     const size = ENEMY_SIZE[enemy.type] || 0.95;
     const root = new THREE.Group();
@@ -861,6 +876,8 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     root.add(health.sprite);
     if (enemy.type === 'MECHAFROG') { for (const x of [-0.32, 0.32]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), new THREE.MeshStandardMaterial({ color: '#f4ffe0', roughness: 0.3 })); eye.position.set(x, height * 0.97, 0.18); const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), emissiveMat('#ff3b30', 2.2)); pupil.position.set(0, 0.02, 0.17); eye.add(pupil); body.add(eye); } }
     if (enemy.type === 'TORNADO' && enemy.fire) { const tw = body.userData.tornado; tw.fire = true; [...tw.layers, ...tw.shells].forEach(l => l.traverse(n => { if (n.isMesh) { n.material.color = new THREE.Color('#ffb070'); n.material.emissive = new THREE.Color('#ff4a00'); n.material.emissiveIntensity = 1.1; } })); tw.dustRing.material.color = new THREE.Color('#ff7a2a'); }
+    if (enemy.type === 'GHOST' || enemy.type === 'FIRELORD') body.traverse(n => { if (n.isMesh) for (const m of (Array.isArray(n.material) ? n.material : [n.material])) { m.transparent = true; m.depthWrite = enemy.type === 'FIRELORD'; if (enemy.type === 'GHOST') { m.opacity = 0.85; if (m.emissive) { m.emissive.set('#5a2a8a'); m.emissiveIntensity = 0.45; } } } });
+    if (enemy.type === 'FIRELORD' && models.demon) body.traverse(n => { if (n.isMesh) for (const m of (Array.isArray(n.material) ? n.material : [n.material])) if (m.emissive && /Main/.test(m.name || '')) { m.emissive.set('#ff3a00'); m.emissiveIntensity = 0.35; } });
     if (enemy.type === 'MAGE') { const orb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), emissiveMat('#b37bff', 3)); orb.position.set(0.42, 0.95, 0.25); body.add(orb); const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), glowMat('#a86bff')); orb.add(halo); root.userData.orb = orb; }
     if (enemy.type === 'MOLE') {
       const hole = new THREE.Group();
@@ -931,15 +948,32 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       }
       return;
     }
-    if (enemy.type === 'MUSHROOM') {
-      if (!u.shroom) { u.shroom = makeGiantShroom(); node.add(u.shroom); }
+    if (enemy.type === 'FIRELORD' || enemy.type === 'RABBIT') {
+      const fire = enemy.type === 'FIRELORD';
+      if (!u.spawnHole) { u.spawnHole = new THREE.Mesh(new THREE.CircleGeometry(1.1, 28), new THREE.MeshBasicMaterial({ color: fire ? '#ff5a1f' : '#2b1a0e', map: fire ? glowTexture : null, transparent: true, depthWrite: false, toneMapped: !fire })); u.spawnHole.rotation.x = -Math.PI / 2; u.spawnHole.position.y = 0.05; node.add(u.spawnHole); }
       if (spawning) {
+        const rise = Math.max(0, (p - 0.35) / 0.65);
+        u.spawnHole.scale.setScalar(0.3 + Math.min(1, p * 2) * 0.9); u.spawnHole.material.opacity = 0.9;
+        body.position.y = fire ? -2.4 * (1 - rise) : (rise > 0 ? Math.sin(rise * Math.PI) * 2.2 : -1.5);
+        body.visible = rise > 0;
+        if (Math.random() < 0.8) (fire ? sparks : dust).emit({ pos: new THREE.Vector3(position.x, 0.15, position.z), count: 3, colors: fire ? ['#ff7a1a', '#ffb340', '#ff3d00', '#ffe08a'] : ['#7a5634', '#a07a50'], speed: fire ? 1.5 : 2.2, up: fire ? 4 : 3, gravity: fire ? 1 : -8, radius: 0.7, life: 0.7, size: fire ? 0.28 : 0.2 });
+      } else {
+        if (!u.spawnFx.done) { u.spawnFx.done = true; u.spawnFx.at = now; ringFx(position, fire ? '#ff7a1a' : '#ff8fd0', { to: 4, life: 0.6, width: 0.22 }); shake = Math.max(shake, 0.3); }
+        const k = (now - u.spawnFx.at) / 600; u.spawnHole.material.opacity = Math.max(0, 0.9 - k); u.spawnHole.scale.setScalar(Math.max(0.01, 1.2 - k * 0.6));
+        if (k >= 1) { node.remove(u.spawnHole); u.spawnHole = null; u.spawnFx = null; }
+      }
+      return;
+    }
+    if (enemy.type === 'MUSHROOM') {
+      if (spawning && !u.shroom && !u.spawnFx.done) { u.shroom = makeGiantShroom(); node.add(u.shroom); }
+      if (!spawning && u.shroom && u.spawnFx.done) { node.remove(u.shroom); u.shroom = null; }
+      if (spawning && u.shroom) {
         body.visible = false;
         const g = Math.min(1, p / 0.7), wob = p > 0.7 ? 1 + Math.sin(now / 35) * 0.06 * (p - 0.7) / 0.3 : 1;
         u.shroom.scale.set(easeBack(g) * wob, easeBack(g) / wob, easeBack(g) * wob);
         if (Math.random() < 0.3) dust.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 2, colors: ['#6b4a2b', '#8a5a2b'], speed: 1.5, up: 1.4, gravity: -5, radius: 0.8, life: 0.5, size: 0.2 });
       } else if (!u.spawnFx.done) {
-        u.spawnFx.done = true; node.remove(u.shroom); u.shroom = null; body.visible = true;
+        u.spawnFx.done = true; if (u.shroom) node.remove(u.shroom); u.shroom = null; body.visible = true;
         dust.emit({ pos: new THREE.Vector3(position.x, 2, position.z), count: 140, colors: ['#d78bff', '#c5ff7a', '#ffd27a', '#ffffff'], speed: 5, up: 3, gravity: -1.2, drag: 1.4, life: 1.8, size: 0.32 });
         sparks.emit({ pos: new THREE.Vector3(position.x, 1.5, position.z), count: 60, colors: ['#c5ff7a', '#d78bff'], speed: 4, up: 4, life: 1, size: 0.25 });
         ringFx(position, '#ffa53a', { to: 5, life: 0.8, width: 0.25 }); shake = Math.max(shake, 0.5);
@@ -951,7 +985,9 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     BOSS: { bg: '#2a0710f2', border: '#ff4d5e', text: '#ffe3e3', shape: 'jagged' },
     MUSHROOM: { bg: '#fff4dcf5', border: '#e0782a', text: '#6b3a12', shape: 'cloud' },
     ALIENBOSS: { bg: '#0b1626f2', border: '#7dff9b', text: '#9dffcb', shape: 'scifi' },
-    MAGE: { bg: '#20103af2', border: '#b37bff', text: '#f0e2ff', shape: 'round' }
+    MAGE: { bg: '#20103af2', border: '#b37bff', text: '#f0e2ff', shape: 'round' },
+    FIRELORD: { bg: '#1a0602f2', border: '#ff7a1a', text: '#ffcf8a', shape: 'jagged' },
+    RABBIT: { bg: '#fff0f8f5', border: '#ff4fb0', text: '#a01a66', shape: 'cloud' }
   };
   function drawChat(chat, text, type, side = false) {
     const st = CHAT_STYLE[type] || CHAT_STYLE.MAGE, g = chat.context;
@@ -977,7 +1013,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   }
   function drawHealth(node, enemy) {
     const ratio = Math.max(0, enemy.hp / Math.max(1, enemy.maxHp));
-    if (enemy.elite) { const style = ELITE_STYLE[enemy.type] || ELITE_STYLE.BOSS; drawPlate(node, { text: enemy.name || enemy.type, health: ratio * 100, color: style.color, elite: style }); return; }
+    if (enemy.elite) { const style = ELITE_STYLE[enemy.type] || ELITE_STYLE.BOSS, sh = enemy.shieldHp != null && enemy.shieldMax && (enemy.shieldUntil || 0) > lastNow ? Math.max(0, enemy.shieldHp / enemy.shieldMax * 100) : -1; drawPlate(node, { text: enemy.name || enemy.type, health: ratio * 100, color: style.color, elite: style, bars: enemy.bars || 1, shield: sh }); return; }
     const key = Math.ceil(ratio * 100);
     if (node.lastKey === key) return;
     node.lastKey = key;
@@ -1127,7 +1163,37 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       switch (enemy.type) {
         case 'FOX': { const jump = now < enemy.jumpUntil ? Math.sin((enemy.jumpUntil - now) / 360 * Math.PI) * 0.75 : 0; body.position.y = jump + Math.abs(Math.sin(t * 11)) * 0.08; body.rotation.x = Math.sin(t * 11) * 0.08 - jump * 0.3; break; }
         case 'EAGLE': { const dive = now < (enemy.dashUntil || 0); body.position.y = (dive ? 0.7 : 1.7) + Math.sin(t * 2.4) * 0.15; body.rotation.x = dive ? 0.35 : 0; body.rotation.z = Math.sin(t * 1.3) * 0.25; break; }
-        case 'GHOST': { body.position.y = 0.25 + Math.sin(t * 2.6) * 0.15; body.rotation.z = Math.sin(t * 1.8) * 0.1; body.traverse(n => { if (n.isMesh && n.material.transparent) n.material.opacity = 0.78 + Math.sin(t * 3.1) * 0.14; }); break; }
+        case 'GHOST': {
+          const eth = now < (enemy.etherealUntil || 0);
+          body.position.y = 0.35 + Math.sin(t * 2.6) * 0.15; body.rotation.z = Math.sin(t * 1.8) * 0.1;
+          const op = eth ? 0.18 + Math.sin(now / 50) * 0.08 : 0.85 + Math.sin(t * 3.1) * 0.1;
+          body.traverse(n => { if (n.isMesh) for (const m of (Array.isArray(n.material) ? n.material : [n.material])) if (m.transparent) m.opacity = op; });
+          if (eth && Math.random() < 0.6) sparks.emit({ pos: new THREE.Vector3(position.x, 0.6 + Math.random(), position.z), count: 1, colors: ['#bfe4ff', '#e6d0ff'], speed: 0.4, up: 0.8, gravity: 0, radius: 0.5, life: 0.6, size: 0.16 });
+          if (enemy.phaseHitAt && now - enemy.phaseHitAt < 120) ringFx(position, '#bfe4ff', { from: 0.3, to: 1.2, life: 0.25, y: 0.9, width: 0.08 });
+          break;
+        }
+        case 'FIRELORD': {
+          const revealed = now < (enemy.revealUntil || 0) || spawning;
+          u.cloak = (u.cloak ?? 1) + ((revealed ? 0 : 1) - (u.cloak ?? 1)) * Math.min(1, dt * 5);
+          const op = 1 - u.cloak * 0.93 + (u.cloak > 0.5 ? Math.sin(now / 90) * 0.03 : 0);
+          const sh = u.cloak < 0.5; body.traverse(n => { if (n.isMesh) { n.castShadow = sh; for (const m of (Array.isArray(n.material) ? n.material : [n.material])) m.opacity = op; } });
+          body.position.y = Math.abs(Math.sin(t * 4)) * 0.05;
+          if (u.eliteAura) { u.eliteAura.visible = u.spikes.visible = u.cloak < 0.6; }
+          node.children.forEach(c => { if (c.material && c.material.map === glowTexture) c.visible = u.cloak < 0.6; });
+          // Faint heat shimmer even when invisible.
+          if (Math.random() < (revealed ? 0.9 : 0.25)) sparks.emit({ pos: new THREE.Vector3(position.x + (Math.random() - 0.5) * 0.8, 0.2 + Math.random() * (revealed ? 2.2 : 0.6), position.z + (Math.random() - 0.5) * 0.6), count: 1, colors: ['#ff7a1a', '#ffb340', '#ff3d00'], speed: 0.3, up: 1.2, gravity: 0.6, life: 0.6, size: revealed ? 0.22 : 0.12 });
+          if (enemy.screamFireAt && now < enemy.screamFireAt) { const k = 1 - (enemy.screamFireAt - now) / 750; body.scale.set(1 + k * 0.12, 1 - k * 0.08, 1 + k * 0.12); if (Math.random() < 0.8) sparks.emit({ pos: new THREE.Vector3(position.x, 1.6, position.z), count: 2, colors: ['#ffe08a', '#ff7a1a'], speed: 2, up: 0.5, gravity: 0, radius: 0.2, life: 0.35, size: 0.2 }); }
+          break;
+        }
+        case 'RABBIT': {
+          body.position.y = enemy.moving ? Math.abs(Math.sin(t * 18)) * 0.25 : 0;
+          if (enemy.moving) {
+            // Speed trail: a streak of pink/white puffs behind the rabbit.
+            for (let i = 0; i < 2; i++) sparks.emit({ pos: new THREE.Vector3(position.x + (Math.random() - 0.5) * 0.4, 0.3 + Math.random() * 1.1, position.z + (Math.random() - 0.5) * 0.4), count: 1, colors: ['#ffd1ec', '#ffffff', '#ff8fd0'], speed: 0.05, up: 0.1, gravity: 0, drag: 3, life: 0.55, size: 0.3 });
+            if (Math.random() < 0.5) dust.emit({ pos: new THREE.Vector3(position.x, 0.1, position.z), count: 1, colors: ['#cdb48a', '#e0d2b4'], speed: 0.6, up: 0.6, gravity: -2, life: 0.5, size: 0.25 });
+          }
+          break;
+        }
         case 'PLANT': {
           const em = enemy.emergeAt || 0;
           if (!u.seed) {
@@ -1199,9 +1265,9 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       if (enemy.leapUntil && now < enemy.leapUntil) { const k = 1 - (enemy.leapUntil - now) / enemy.leapDur; body.position.y = Math.sin(k * Math.PI) * (enemy.leapKind === 'chupa' ? 3.4 : 2.4); body.rotation.x = -0.4 + k * 0.8; }
       if (enemy.type === 'MUSHNUB') { const age = now - (enemy.bornAt || 0); if (age < 350) body.scale.setScalar(Math.max(0.05, age / 350)); body.position.y += Math.abs(Math.sin(t * 16)) * 0.08; if (Math.random() < 0.2) dust.emit({ pos: new THREE.Vector3(position.x, 0.5, position.z), count: 1, colors: ['#d78bff', '#c5ff7a'], speed: 0.2, up: 0.4, gravity: 0, life: 0.6, size: 0.12 }); }
       // Prismatic space shield (Alien Overlord and its illusions).
-      if (enemy.type === 'ALIENBOSS') {
-        const on = now < (enemy.shieldUntil || 0);
-        if (on && !u.shield) { u.shield = makePrismShield(enemy.illusion ? 1.7 : 2.0); node.add(u.shield); }
+      if (enemy.shieldUntil !== undefined) {
+        const on = now < (enemy.shieldUntil || 0) && !spawning;
+        if (on && !u.shield) { u.shield = makePrismShield(enemy.type === 'ALIENBOSS' ? (enemy.illusion ? 1.7 : 2.0) : enemy.type === 'MUSHROOM' ? 2.1 : 1.45); node.add(u.shield); }
         if (u.shield) { u.shield.visible = on; if (on) { const hit = now - (enemy.shieldHitAt || 0) < 160; u.shield.material.uniforms.uHit.value = hit ? 1 : Math.max(0, u.shield.material.uniforms.uHit.value - dt * 4); u.shield.position.y = (u.height || 2) * 0.55 + body.position.y; u.shield.rotation.y += dt * 0.8; const left = (enemy.shieldUntil - now) / 1000; u.shield.material.uniforms.uAlpha.value = left < 2 && Math.floor(now / 120) % 2 ? 0.25 : 0.9; } }
       }
       // Speech bubbles (elites + angry gnomes).
@@ -1210,7 +1276,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
         if (!u.chat) { u.chat = makeBillboard(3.8, 1.15, 1024, 310); u.chat.sprite.center.set(side ? 0 : 0.5, side ? 0.5 : 0); node.add(u.chat.sprite); }
         if (u.chat.lastAt !== enemy.say.at) { u.chat.lastAt = enemy.say.at; drawChat(u.chat, enemy.say.text, enemy.type, side); }
         const pop = Math.min(1, (now - enemy.say.at) / 160);
-        u.chat.sprite.visible = !spawning; if (side) { u.chat.sprite.position.set(1.3 + (enemy.type === 'MUSHROOM' ? 0.5 : 0), u.height * 0.72 + body.position.y, 0); } else u.chat.sprite.position.y = u.height + 0.8 + body.position.y; u.chat.sprite.scale.set(3.8 * (0.5 + pop * 0.5), 1.15 * (0.5 + pop * 0.5), 1);
+        u.chat.sprite.visible = !spawning && !(enemy.type === 'FIRELORD' && (u.cloak ?? 1) > 0.6); if (side) { u.chat.sprite.position.set(1.3 + (enemy.type === 'MUSHROOM' ? 0.5 : 0), u.height * 0.72 + body.position.y, 0); } else u.chat.sprite.position.y = u.height + 0.8 + body.position.y; u.chat.sprite.scale.set(3.8 * (0.5 + pop * 0.5), 1.15 * (0.5 + pop * 0.5), 1);
       } else if (u.chat) u.chat.sprite.visible = false;
       // Teleport (mage + alien overlord): stretch in from a thin beam of light.
       if (enemy.teleportAt && now - enemy.teleportAt < 450) { const p = (now - enemy.teleportAt) / 450; body.scale.set(0.2 + p * 0.8, 1.8 - p * 0.8, 0.2 + p * 0.8); }
@@ -1221,7 +1287,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
       if (u.materialColors === undefined) { u.materialColors = []; body.traverse(part => { if (part.isMesh) for (const mat of (Array.isArray(part.material) ? part.material : [part.material])) if (mat?.color) u.materialColors.push({ mat, color: mat.color.clone() }); }); }
       for (const entry of u.materialColors) entry.mat.color.copy(hitFlash ? FLASH : entry.color);
       if (enemy.hitUntil && enemy.hitUntil !== u.lastHit) { u.lastHit = enemy.hitUntil; sparks.emit({ pos: new THREE.Vector3(position.x, 0.6, position.z), count: 5, colors: ['#fff3a0', '#ffb347'], speed: 3, up: 2, life: 0.25, size: 0.14 }); }
-      u.health.sprite.visible = (enemy.elite || enemy.hp < enemy.maxHp) && !spawning;
+      u.health.sprite.visible = (enemy.elite || enemy.hp < enemy.maxHp) && !spawning && !(enemy.type === 'FIRELORD' && (u.cloak ?? 1) > 0.6);
       if ((enemy.type === 'MOLE' || enemy.type === 'PLANT') && now < (enemy.emergeAt || 0)) u.health.sprite.visible = false;
       if (enemy.leapUntil && now < enemy.leapUntil) u.health.sprite.position.y += body.position.y;
       drawHealth(u.health, enemy);
@@ -1291,6 +1357,35 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     node.userData = { icon, ring, ring2, pillar, disc, halo, label, style, big };
     scene.add(node);
     return node;
+  }
+  const carrotNodes = new Map();
+  function makeCarrot() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.8, 10), new THREE.MeshStandardMaterial({ color: '#ff7a1a', roughness: 0.6, emissive: '#ff2a00', emissiveIntensity: 0 }));
+    body.rotation.x = Math.PI; body.position.y = 0.45; g.add(body);
+    for (let i = 0; i < 3; i++) { const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.38, 5), new THREE.MeshStandardMaterial({ color: '#3fae3a' })); leaf.position.set((i - 1) * 0.07, 0.98, 0); leaf.rotation.z = (i - 1) * 0.35; g.add(leaf); }
+    const warn = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.2, 40), new THREE.MeshBasicMaterial({ color: '#ff3b30', transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    warn.rotation.x = -Math.PI / 2; warn.position.y = 0.05; g.add(warn);
+    g.traverse(n => { if (n.isMesh) n.castShadow = true; });
+    g.userData = { body, warn };
+    return g;
+  }
+  function syncCarrots(items = [], now) {
+    const seen = new Set();
+    for (const c of items) {
+      seen.add(c);
+      let node = carrotNodes.get(c);
+      if (!node) { node = makeCarrot(); carrotNodes.set(c, node); scene.add(node); }
+      const pos = actorPosition(c.x, c.y), age = now - c.at, left = Math.max(0, c.explodeAt - now), total = Math.max(1, c.explodeAt - c.at);
+      const drop = Math.min(1, age / 220);
+      node.position.set(pos.x, (1 - drop) * 1.6, pos.z);
+      const k = 1 - left / total, blink = Math.floor(now / Math.max(45, 220 - k * 180)) % 2;
+      node.userData.body.material.emissiveIntensity = blink ? 1.4 * k : 0;
+      node.userData.body.scale.setScalar(1 + (blink ? 0.12 * k : 0));
+      node.userData.warn.material.opacity = 0.2 + k * 0.5 * (blink ? 1 : 0.5);
+      node.rotation.y += 0.05;
+    }
+    for (const [c, node] of carrotNodes) if (!seen.has(c)) { scene.remove(node); carrotNodes.delete(c); }
   }
   function syncDrops(items, now, dt) {
     const seen = new Set();
@@ -1393,6 +1488,17 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     mesh.position.copy(pos).setY(height / 2); scene.add(mesh);
     activeFx.push({ life, age: 0, update(p) { mesh.scale.set(1 - p * 0.85, 1, 1 - p * 0.85); mesh.material.opacity = 1 - p * p; }, dispose() { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); } });
   }
+  // Flat cone/sector on the ground. World angle a (radians) and spread are in game space.
+  function sectorFx(pos, a, spread, r0, r1, color, life, { y = 0.12, flash = false, opacity = 0.75 } = {}) {
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 40, 1, -(a + spread), spread * 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.5), transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    mesh.rotation.x = -Math.PI / 2; mesh.position.copy(pos).setY(y); scene.add(mesh);
+    activeFx.push({ life, age: 0, update(p) { mesh.material.opacity = flash ? opacity * (0.45 + 0.55 * Math.abs(Math.sin(p * 18))) : opacity * (1 - p); }, dispose() { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); } });
+  }
+  function waveArcFx(pos, a, spread, range, color, delay, life) {
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 40, 1, -(a + spread), spread * 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    mesh.rotation.x = -Math.PI / 2; mesh.position.copy(pos).setY(0.9); scene.add(mesh);
+    activeFx.push({ life: life + delay, age: 0, update(p) { const t = Math.max(0, (p * (life + delay) - delay) / life); mesh.visible = t > 0; mesh.scale.setScalar(0.4 + t * range); mesh.position.y = 0.9 - t * 0.6; mesh.material.opacity = (1 - t) * 0.95; }, dispose() { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); } });
+  }
   const stripeTex = canvasTexture(16, 128, (g, w, h) => { g.clearRect(0, 0, w, h); for (let y = 0; y < h; y += 8) { g.fillStyle = y % 16 ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,0)'; g.fillRect(0, y, w, 4); } }, true);
   stripeTex.colorSpace = THREE.NoColorSpace;
   function stripeColumn(pos, life, grow) {
@@ -1481,6 +1587,17 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
           dust.emit({ pos: pos.clone().setY(2.5), count: 50, colors: ['#d78bff', '#c5ff7a', '#ffd27a'], speed: 3, up: 5, gravity: -1, life: 1.4, size: 0.3 });
           break;
         }
+        case 'screamCharge': { sectorFx(pos, f.a, 0.55, 0.6, 330 / UNIT, '#ff3d00', 0.75, { flash: true, opacity: 0.35 }); ringFx(pos, '#ffb340', { from: 3, to: 0.3, life: 0.7, y: 1.4, width: 0.18 }); break; }
+        case 'sonicScream': {
+          const range = (f.range || 330) / UNIT, spread = f.spread || 0.55;
+          sectorFx(pos, f.a, spread, 0.5, range, '#ff7a1a', 0.45, { opacity: 0.6 });
+          for (let i = 0; i < 5; i++) waveArcFx(pos, f.a, spread, range, i % 2 ? '#ffd27a' : '#ff5a1f', i * 0.07, 0.42);
+          for (let i = 0; i < 40; i++) { const aa = f.a + (Math.random() - 0.5) * spread * 2, rr = Math.random() * range; sparks.emit({ pos: new THREE.Vector3(pos.x + Math.cos(aa) * rr, 0.4 + Math.random() * 1.2, pos.z + Math.sin(aa) * rr), count: 1, colors: ['#ffb340', '#ff3d00', '#fff1a0'], speed: 1.5, up: 1, life: 0.45, size: 0.3 }); }
+          shake = Math.max(shake, 0.6); break;
+        }
+        case 'carrotBoom': { ringFx(pos, '#ff8a2a', { to: 2.4, life: 0.4, width: 0.3 }); craterDecal(pos, 1.0); sparks.emit({ pos: pos.clone().setY(0.5), count: 40, colors: ['#ff8a2a', '#ffd27a', '#5fd35a', '#ffffff'], speed: 5, up: 4, life: 0.6, size: 0.28 }); dust.emit({ pos: pos.clone().setY(0.4), count: 24, colors: ['#5a3d22', '#8b7355', '#ff8a2a'], speed: 3, up: 3, gravity: -6, life: 0.8, size: 0.3 }); shake = Math.max(shake, 0.3); break; }
+        case 'mechBoom': { ringFx(pos, '#ffb340', { to: 2.8, life: 0.45, width: 0.3 }); pillarFx(pos, '#ff7a1a', { height: 4, life: 0.5, radius: 0.9 }); craterDecal(pos, 1.3); sparks.emit({ pos: pos.clone().setY(0.8), count: 70, colors: ['#ffb340', '#ff5a1f', '#ffffff', '#9aa3ad'], speed: 6, up: 5, gravity: -6, life: 0.8, size: 0.3 }); dust.emit({ pos: pos.clone().setY(0.6), count: 30, colors: ['#3a3a3a', '#5a5a5a', '#2a2a2a'], speed: 3, up: 2.5, gravity: -1, drag: 1.5, life: 1.3, size: 0.45 }); shake = Math.max(shake, 0.45); break; }
+        case 'shieldBreak': { ringFx(pos, '#9ff4ff', { to: 4, life: 0.5, y: 1.4, width: 0.2 }); sparks.emit({ pos: pos.clone().setY(1.6), count: 70, colors: ['#9ff4ff', '#ff9cf0', '#ffffff', '#9dffcb'], speed: 7, up: 3, gravity: -4, life: 0.8, size: 0.26 }); shake = Math.max(shake, 0.25); break; }
         case 'mushBoom': { ringFx(pos, '#c5ff7a', { to: 2.6, life: 0.4, width: 0.3 }); sparks.emit({ pos: pos.clone().setY(0.6), count: 30, colors: ['#c5ff7a', '#d78bff', '#ffd27a'], speed: 4, up: 3, life: 0.5, size: 0.25 }); dust.emit({ pos: pos.clone().setY(0.6), count: 24, colors: ['#d78bff', '#a76bd6', '#c5ff7a'], speed: 2.5, up: 1.5, gravity: 0.2, drag: 2, life: 1.2, size: 0.42 }); break; }
         case 'join': { const node = playerNodes.get(f.playerId); const p = node ? node.position.clone() : pos; dust.emit({ pos: p.clone().setY(1.6), count: 60, colors: ['#ff5e5e', '#ffd45d', '#5ec8ff', '#7be37b', '#c08bff', '#ffffff'], speed: 3, up: 4, gravity: -4, drag: 1.2, life: 1.8, size: 0.16 }); ringFx(p, players.get(f.playerId)?.color || '#ffd45d', { to: 2, life: 0.7, y: 0.35 }); break; }
         default: break;
@@ -1614,7 +1731,7 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
   }
   window.addEventListener('resize', resize);
   resize();
-  window.__r3d = { renderer, composer, scene, camera, bloom, snap: () => { snapCam = 3; }, focus: (x, y, d) => { focusCam = x == null ? null : { x, y, d }; snapCam = 3; } };
+  window.__r3d = { get houseBox() { return houseBox; }, renderer, composer, scene, camera, bloom, snap: () => { snapCam = 3; }, focus: (x, y, d) => { focusCam = x == null ? null : { x, y, d }; snapCam = 3; } };
   const readyPromise = loadModels();
   let slowFrames = 0, postFx = new URLSearchParams(location.search).get('fx') === '1';
 
@@ -1625,13 +1742,14 @@ export function createGameRenderer({ canvas, world, trees, decor = [], grassTuft
     resize,
     screenToWorld,
     render(state, dt, now) {
-      time.value = now / 1000;
+      time.value = now / 1000; lastNow = now;
       if (ready) {
         syncPlayers(state.players, now, dt, state);
         syncEnemies(state.enemies, now, dt);
         syncProjectiles('shot', state.shots, projectileNodes, now);
         syncProjectiles('fireball', state.fireballs, fireballNodes, now);
         syncDrops(state.drops, now, dt);
+        syncCarrots(state.carrots, now);
         syncProjectiles('beam', state.enemyBeams, beamNodes, now);
         syncBlood(state.bloodSplats || []);
         handleFx(state.fx || [], now, state.players);
